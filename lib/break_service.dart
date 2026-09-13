@@ -64,22 +64,26 @@ class BreakService extends ChangeNotifier {
   static const _kPeriods = 'hr_periods2'; // مفتاح جديد (نموذج نافذة+راحات)
   static const _kCode = 'hr_bypass_code';
   static const _kDone = 'hr_done_keys';
+  static const _kShowPhrases = 'hr_show_phrases'; // عرض العبارات أم شاشة صامتة
 
   bool _enabled = true;
   List<BreakPeriod> _periods = [];
   String _bypassCode = '';
   Set<String> _doneKeys = {};
+  bool _showPhrases = true; // true: عبارات تحفيزية، false: شاشة صامتة بعدّاد فقط
 
   bool get enabled => _enabled;
   List<BreakPeriod> get periods => List.unmodifiable(_periods);
   String get bypassCode => _bypassCode;
   bool get hasBypassCode => _bypassCode.trim().isNotEmpty;
+  bool get showPhrases => _showPhrases;
 
   Future<void> load() async {
     try {
       final sp = await SharedPreferences.getInstance();
       _enabled = sp.getBool(_kEnabled) ?? true;
       _bypassCode = sp.getString(_kCode) ?? '';
+      _showPhrases = sp.getBool(_kShowPhrases) ?? true;
       final raw = sp.getString(_kPeriods);
       if (raw != null && raw.isNotEmpty) {
         _periods = (jsonDecode(raw) as List)
@@ -110,15 +114,18 @@ class BreakService extends ChangeNotifier {
     bool? enabled,
     List<BreakPeriod>? periods,
     String? bypassCode,
+    bool? showPhrases,
   }) async {
     if (enabled != null) _enabled = enabled;
     if (periods != null) _periods = periods.take(3).toList();
     if (bypassCode != null) _bypassCode = bypassCode.trim();
+    if (showPhrases != null) _showPhrases = showPhrases;
     final sp = await SharedPreferences.getInstance();
     await sp.setBool(_kEnabled, _enabled);
     await sp.setString(
         _kPeriods, jsonEncode(_periods.map((p) => p.toJson()).toList()));
     await sp.setString(_kCode, _bypassCode);
+    await sp.setBool(_kShowPhrases, _showPhrases);
     notifyListeners();
   }
 

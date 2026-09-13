@@ -11,11 +11,16 @@ class BreakScreen extends StatefulWidget {
   final int index;
   final int restStart;
   final DateTime end;
+
+  /// عند الإغلاق: أرسِل التطبيق للخلفية ليعود المستخدم إلى ما كان يستخدمه قبل
+  /// الاستراحة (للاستراحات الحقيقية)، بدل البقاء على رئيسية التطبيق.
+  final bool moveToBackOnClose;
   const BreakScreen(
       {super.key,
       required this.index,
       required this.restStart,
-      required this.end});
+      required this.end,
+      this.moveToBackOnClose = false});
 
   @override
   State<BreakScreen> createState() => _BreakScreenState();
@@ -69,6 +74,10 @@ class _BreakScreenState extends State<BreakScreen> {
     setState(() => _remaining = r.isNegative ? Duration.zero : r);
   }
 
+  /// قناة أصليّة لإرسال التطبيق إلى الخلفية (العودة للتطبيق السابق).
+  static const _platform =
+      MethodChannel('com.alaoufi.health_reminder/installer');
+
   Future<void> _finish() async {
     if (_finishing) return; // إغلاق مرّة واحدة فقط
     _finishing = true;
@@ -78,6 +87,12 @@ class _BreakScreenState extends State<BreakScreen> {
     // pop() المباشر لا يحجبه PopScope(canPop:false) — بخلاف maybePop() الذي كان
     // يُحترَم فيبقى العدّاد ثابتًا على 00:00 بلا إغلاق (سبب تجمّد الشاشة).
     if (mounted) Navigator.of(context).pop();
+    // للاستراحات الحقيقية: أرسِل التطبيق للخلفية ليعود التطبيق السابق للواجهة.
+    if (widget.moveToBackOnClose) {
+      try {
+        await _platform.invokeMethod('moveToBack');
+      } catch (_) {}
+    }
   }
 
   Future<void> _trySkip() async {
@@ -158,6 +173,7 @@ class _BreakScreenState extends State<BreakScreen> {
   Widget build(BuildContext context) {
     final g = _gradients[_phase % _gradients.length];
     final phrase = _phrases[_phase % _phrases.length];
+    final showPhrases = BreakService.instance.showPhrases;
     return PopScope(
       canPop: false,
       child: AnnotatedRegion<SystemUiOverlayStyle>(
@@ -198,20 +214,21 @@ class _BreakScreenState extends State<BreakScreen> {
                                   fontSize: 30,
                                   fontWeight: FontWeight.bold)),
                           const SizedBox(height: 28),
-                          AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 500),
-                            child: Text(
-                              phrase,
-                              key: ValueKey(phrase),
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 19,
-                                  height: 1.8,
-                                  fontWeight: FontWeight.w600),
+                          if (showPhrases)
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 500),
+                              child: Text(
+                                phrase,
+                                key: ValueKey(phrase),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 19,
+                                    height: 1.8,
+                                    fontWeight: FontWeight.w600),
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 36),
+                          if (showPhrases) const SizedBox(height: 36),
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 28, vertical: 14),
