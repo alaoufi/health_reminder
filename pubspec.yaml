@@ -1,7 +1,7 @@
 name: health_reminder
 description: "لا تجلس طويلًا — مذكّر صحّي بكسر الجلوس والحركة"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ^3.12.2
@@ -18,6 +18,8 @@ dependencies:
   # إشعارات محلية (تنبيه صامت بملء الشاشة عند حلول الفترة)
   flutter_local_notifications: ^18.0.1
   timezone: ^0.9.4
+  # نافذة نظام فوق كل التطبيقات (قفل الحركة فوق أي تطبيق)
+  flutter_overlay_window: ^0.5.0
 
 dev_dependencies:
   flutter_test:

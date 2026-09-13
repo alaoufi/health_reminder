@@ -4,6 +4,19 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'break_service.dart';
 import 'home_screen.dart';
 import 'notify_service.dart';
+import 'overlay_break.dart';
+
+/// نقطة دخول نافذة القفل (تُرسَم فوق كل التطبيقات) — يشغّلها flutter_overlay_window.
+@pragma('vm:entry-point')
+void overlayMain() {
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: Scaffold(
+      backgroundColor: Colors.transparent,
+      body: OverlayBreak(),
+    ),
+  ));
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

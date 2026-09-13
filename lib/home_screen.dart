@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
 import 'break_screen.dart';
 import 'break_service.dart';
@@ -18,18 +19,38 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Timer? _timer;
   bool _breakShowing = false;
+  bool _starting = false;
+  bool _overlayPerm = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _refreshPerm();
     WidgetsBinding.instance.addPostFrameCallback((_) => _check());
     _timer = Timer.periodic(const Duration(seconds: 20), (_) => _check());
   }
 
+  Future<void> _refreshPerm() async {
+    try {
+      final p = await FlutterOverlayWindow.isPermissionGranted();
+      if (mounted) setState(() => _overlayPerm = p);
+    } catch (_) {}
+  }
+
+  Future<void> _requestOverlayPerm() async {
+    try {
+      await FlutterOverlayWindow.requestPermission();
+    } catch (_) {}
+    await _refreshPerm();
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _check();
+    if (state == AppLifecycleState.resumed) {
+      _refreshPerm();
+      _check();
+    }
   }
 
   @override
@@ -40,16 +61,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _check() async {
-    if (_breakShowing || !mounted) return;
+    if (_breakShowing || _starting || !mounted) return;
     final b = BreakService.instance.activeBreakNow();
     if (b == null) return;
-    _breakShowing = true;
-    await Navigator.of(context).push(MaterialPageRoute(
-      fullscreenDialog: true,
-      builder: (_) => BreakScreen(index: b.index, end: b.end),
-    ));
-    _breakShowing = false;
-    if (mounted) setState(() {});
+    _starting = true;
+    try {
+      // القفل فوق كل التطبيقات (نافذة نظام) عند منح الصلاحية — يبقى فوق أي تطبيق.
+      if (_overlayPerm && !await FlutterOverlayWindow.isActive()) {
+        await BreakService.instance.beginOverlay(b.index, b.end);
+        await FlutterOverlayWindow.showOverlay(
+          height: WindowSize.fullCover,
+          width: WindowSize.matchParent,
+          alignment: OverlayAlignment.center,
+          flag: OverlayFlag.focusPointer,
+          overlayTitle: 'لا تجلس طويلًا',
+          enableDrag: false,
+        );
+        return;
+      }
+      // احتياط داخل التطبيق (بلا صلاحية العرض فوق التطبيقات).
+      if (!mounted) return;
+      _breakShowing = true;
+      await Navigator.of(context).push(MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => BreakScreen(index: b.index, end: b.end),
+      ));
+      _breakShowing = false;
+      if (mounted) setState(() {});
+    } finally {
+      _starting = false;
+    }
   }
 
   Future<void> _testNow() async {
@@ -146,6 +187,41 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 title: const Text('تشغيل/إيقاف',
                     style: TextStyle(fontWeight: FontWeight.bold)),
               ),
+              // بطاقة صلاحية القفل فوق كل التطبيقات (تظهر حتى تُمنح).
+              if (!_overlayPerm)
+                Card(
+                  color: scheme.errorContainer.withValues(alpha: 0.5),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.layers, color: scheme.error),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text('القفل فوق كل التطبيقات',
+                                  style: TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'لِيُغطّي التنبيه شاشتك فوق أي تطبيق (لا داخل هذا '
+                          'التطبيق فقط)، امنح صلاحية «العرض فوق التطبيقات».',
+                          style: TextStyle(fontSize: 13, height: 1.5),
+                        ),
+                        const SizedBox(height: 8),
+                        FilledButton.icon(
+                          onPressed: _requestOverlayPerm,
+                          icon: const Icon(Icons.open_in_new, size: 18),
+                          label: const Text('منح الصلاحية'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               const Divider(),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),

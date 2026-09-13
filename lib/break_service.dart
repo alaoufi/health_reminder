@@ -112,6 +112,16 @@ class BreakService extends ChangeNotifier {
     } catch (_) {}
   }
 
+  /// يُسلّم فترة الحركة إلى نافذة القفل (فوق كل التطبيقات): يخزّن وقت الانتهاء
+  /// ليقرأه معزول النافذة، ويُعلّم الفترة منجَزةً كي لا تتكرّر اليوم.
+  Future<void> beginOverlay(int index, DateTime end) async {
+    try {
+      final sp = await SharedPreferences.getInstance();
+      await sp.setInt('hr_active_end', end.millisecondsSinceEpoch);
+    } catch (_) {}
+    await markDone(index);
+  }
+
   /// الفترة الفعّالة الآن مع وقت انتهائها — أو null.
   ({int index, DateTime end})? activeBreakNow() {
     if (!_enabled) return null;
