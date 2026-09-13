@@ -18,7 +18,7 @@ android {
 
     defaultConfig {
         applicationId = "com.alaoufi.health_reminder"
-        minSdk = 23 // Android 6.0 — كافٍ للمنبّهات الدقيقة والإشعارات
+        minSdk = flutter.minSdkVersion // Android 6.0 — كافٍ للمنبّهات الدقيقة والإشعارات
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName

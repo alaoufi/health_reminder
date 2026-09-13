@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
@@ -19,8 +18,8 @@ class NotifyService {
     if (_ready) return;
     try {
       tzdata.initializeTimeZones();
-      final String name = await FlutterTimezone.getLocalTimezone();
-      tz.setLocalLocation(tz.getLocation(name));
+      // المنطقة الزمنية لمكّة/الرياض (UTC+3 بلا توقيت صيفيّ) — مناسبة للمستخدم.
+      tz.setLocalLocation(tz.getLocation('Asia/Riyadh'));
     } catch (_) {
       try {
         tz.setLocalLocation(tz.getLocation('UTC'));
