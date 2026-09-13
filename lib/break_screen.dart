@@ -26,6 +26,12 @@ class _BreakScreenState extends State<BreakScreen> {
   Duration _remaining = Duration.zero;
   int _phase = 0;
 
+  /// مخرج الطوارئ: مدّة الضغط المطوّل المطلوبة للإغلاق (طويلة نسبيًّا عمدًا).
+  static const Duration _holdToClose = Duration(seconds: 5);
+  Timer? _holdTimer;
+  double _holdProgress = 0; // 0..1 تقدّم الضغط المطوّل
+  bool _finishing = false; // حارس: إغلاق مرّة واحدة فقط
+
   static const List<List<Color>> _gradients = [
     [Color(0xFF134E5E), Color(0xFF71B280)],
     [Color(0xFF1A2980), Color(0xFF26D0CE)],
@@ -64,9 +70,14 @@ class _BreakScreenState extends State<BreakScreen> {
   }
 
   Future<void> _finish() async {
+    if (_finishing) return; // إغلاق مرّة واحدة فقط
+    _finishing = true;
     _tick?.cancel();
+    _holdTimer?.cancel();
     await BreakService.instance.markDone(widget.index, widget.restStart);
-    if (mounted) Navigator.of(context).maybePop();
+    // pop() المباشر لا يحجبه PopScope(canPop:false) — بخلاف maybePop() الذي كان
+    // يُحترَم فيبقى العدّاد ثابتًا على 00:00 بلا إغلاق (سبب تجمّد الشاشة).
+    if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> _trySkip() async {
@@ -107,9 +118,33 @@ class _BreakScreenState extends State<BreakScreen> {
     }
   }
 
+  // مخرج الطوارئ: يبدأ العدّ عند الضغط، ويُلغى عند الرفع قبل الاكتمال.
+  void _startHold() {
+    _holdTimer?.cancel();
+    final start = DateTime.now();
+    _holdTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+      final p = DateTime.now().difference(start).inMilliseconds /
+          _holdToClose.inMilliseconds;
+      if (p >= 1.0) {
+        _holdTimer?.cancel();
+        _holdTimer = null;
+        _finish();
+      } else if (mounted) {
+        setState(() => _holdProgress = p);
+      }
+    });
+  }
+
+  void _cancelHold() {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    if (mounted && _holdProgress != 0) setState(() => _holdProgress = 0);
+  }
+
   @override
   void dispose() {
     _tick?.cancel();
+    _holdTimer?.cancel();
     super.dispose();
   }
 
@@ -128,84 +163,143 @@ class _BreakScreenState extends State<BreakScreen> {
       child: AnnotatedRegion<SystemUiOverlayStyle>(
         value: SystemUiOverlayStyle.light,
         child: Scaffold(
-          body: AnimatedContainer(
-            duration: const Duration(milliseconds: 1200),
-            width: double.infinity,
-            height: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: g,
-              ),
-            ),
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(28),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Spacer(),
-                    const Icon(Icons.self_improvement,
-                        size: 64, color: Colors.white),
-                    const SizedBox(height: 12),
-                    const Text('لا تجلس طويلًا',
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 30,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 28),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 500),
-                      child: Text(
-                        phrase,
-                        key: ValueKey(phrase),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 19,
-                            height: 1.8,
-                            fontWeight: FontWeight.w600),
+          // مخرج الطوارئ: الضغط المطوّل في أي مكان يبدأ العدّ للإغلاق.
+          body: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: (_) => _startHold(),
+            onPointerUp: (_) => _cancelHold(),
+            onPointerCancel: (_) => _cancelHold(),
+            child: Stack(
+              children: [
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 1200),
+                  width: double.infinity,
+                  height: double.infinity,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: g,
+                    ),
+                  ),
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(28),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Spacer(),
+                          const Icon(Icons.self_improvement,
+                              size: 64, color: Colors.white),
+                          const SizedBox(height: 12),
+                          const Text('لا تجلس طويلًا',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 28),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 500),
+                            child: Text(
+                              phrase,
+                              key: ValueKey(phrase),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 19,
+                                  height: 1.8,
+                                  fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(height: 36),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 28, vertical: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: Colors.white.withValues(alpha: 0.4)),
+                            ),
+                            child: Text(
+                              _fmt(_remaining),
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 46,
+                                  fontWeight: FontWeight.bold,
+                                  fontFeatures: [FontFeature.tabularFigures()]),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          const Text('تعود تلقائيًّا عند انتهاء الوقت',
+                              style: TextStyle(
+                                  color: Colors.white70, fontSize: 13)),
+                          const Spacer(),
+                          if (BreakService.instance.hasBypassCode)
+                            TextButton.icon(
+                              onPressed: _trySkip,
+                              icon: const Icon(Icons.lock_open,
+                                  color: Colors.white70, size: 18),
+                              label: const Text('تخطّي بالرمز (للضرورة)',
+                                  style: TextStyle(color: Colors.white70)),
+                            ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'للطوارئ: اضغط مطوّلًا في أي مكان '
+                            '${_holdToClose.inSeconds} ثوانٍ للإغلاق',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                color: Colors.white54, fontSize: 12),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 36),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 28, vertical: 14),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.4)),
-                      ),
-                      child: Text(
-                        _fmt(_remaining),
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 46,
-                            fontWeight: FontWeight.bold,
-                            fontFeatures: [FontFeature.tabularFigures()]),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    const Text('تعود تلقائيًّا عند انتهاء الوقت',
-                        style: TextStyle(color: Colors.white70, fontSize: 13)),
-                    const Spacer(),
-                    if (BreakService.instance.hasBypassCode)
-                      TextButton.icon(
-                        onPressed: _trySkip,
-                        icon: const Icon(Icons.lock_open,
-                            color: Colors.white70, size: 18),
-                        label: const Text('تخطّي بالرمز (للضرورة)',
-                            style: TextStyle(color: Colors.white70)),
-                      ),
-                  ],
+                  ),
                 ),
-              ),
+                if (_holdProgress > 0) _buildHoldIndicator(),
+              ],
             ),
           ),
         ),
       ),
     );
   }
+
+  /// مؤشّر تقدّم الضغط المطوّل (يظهر أثناء الضغط فقط).
+  Widget _buildHoldIndicator() => Positioned.fill(
+        child: IgnorePointer(
+          child: Container(
+            color: Colors.black.withValues(alpha: 0.35),
+            alignment: Alignment.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 88,
+                  height: 88,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        value: _holdProgress,
+                        strokeWidth: 6,
+                        color: Colors.white,
+                        backgroundColor: Colors.white24,
+                      ),
+                      Text('${(_holdProgress * 100).round()}%',
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text('استمرّ بالضغط للإغلاق…',
+                    style: TextStyle(color: Colors.white, fontSize: 14)),
+              ],
+            ),
+          ),
+        ),
+      );
 }

@@ -163,10 +163,18 @@ class BreakService extends ChangeNotifier {
   }
 
   /// يخزّن وقت انتهاء الراحة لنافذة القفل، ويُعلّمها منجَزةً.
+  ///
+  /// نخزّن أيضًا **مدّة الراحة بالدقائق** كخطّ أمان: إن تعذّر على عزلة النافذة
+  /// قراءة وقت الانتهاء، تحسب نهاية بديلة من هذه المدّة بدل أن تبقى بلا نهاية
+  /// (وهو ما كان يحبس الجهاز بلا عدّاد).
   Future<void> beginOverlay(int index, int restStart, DateTime end) async {
     try {
       final sp = await SharedPreferences.getInstance();
+      var mins = end.difference(DateTime.now()).inMinutes;
+      if (mins < 1) mins = 1; // حدّ أدنى
+      if (mins > 30) mins = 30; // سقف أمان
       await sp.setInt('hr_active_end', end.millisecondsSinceEpoch);
+      await sp.setInt('hr_active_minutes', mins);
     } catch (_) {}
     await markDone(index, restStart);
   }
