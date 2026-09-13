@@ -30,6 +30,7 @@ class _BreakScreenState extends State<BreakScreen> {
   static const Duration _holdToClose = Duration(seconds: 5);
   Timer? _holdTimer;
   double _holdProgress = 0; // 0..1 تقدّم الضغط المطوّل
+  bool _finishing = false; // حارس: إغلاق مرّة واحدة فقط
 
   static const List<List<Color>> _gradients = [
     [Color(0xFF134E5E), Color(0xFF71B280)],
@@ -69,10 +70,14 @@ class _BreakScreenState extends State<BreakScreen> {
   }
 
   Future<void> _finish() async {
+    if (_finishing) return; // إغلاق مرّة واحدة فقط
+    _finishing = true;
     _tick?.cancel();
     _holdTimer?.cancel();
     await BreakService.instance.markDone(widget.index, widget.restStart);
-    if (mounted) Navigator.of(context).maybePop();
+    // pop() المباشر لا يحجبه PopScope(canPop:false) — بخلاف maybePop() الذي كان
+    // يُحترَم فيبقى العدّاد ثابتًا على 00:00 بلا إغلاق (سبب تجمّد الشاشة).
+    if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> _trySkip() async {
