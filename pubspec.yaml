@@ -1,0 +1,29 @@
+name: health_reminder
+description: "لا تجلس طويلًا — مذكّر صحّي بكسر الجلوس والحركة"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # تخزين الإعداد محليًّا
+  shared_preferences: ^2.3.2
+  # إشعارات محلية (تنبيه صامت بملء الشاشة عند حلول الفترة)
+  flutter_local_notifications: ^18.0.1
+  timezone: ^0.9.4
+  flutter_timezone: ^3.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
