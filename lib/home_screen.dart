@@ -27,7 +27,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _refreshPerm();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _check());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // تهيئة الإشعارات وجدولتها بعد ظهور الواجهة (لا تُعطّل الإقلاع إن فشلت).
+      try {
+        await NotifyService.instance.init();
+        await NotifyService.instance.rescheduleAll();
+      } catch (_) {}
+      _check();
+    });
     _timer = Timer.periodic(const Duration(seconds: 20), (_) => _check());
   }
 

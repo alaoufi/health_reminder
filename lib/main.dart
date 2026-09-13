@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'break_service.dart';
 import 'home_screen.dart';
-import 'notify_service.dart';
 import 'overlay_break.dart';
+
+/// أخطاء الإقلاع — تُعرض للمستخدم بدل الانهيار الصامت.
+final List<String> startupErrors = [];
 
 /// نقطة دخول نافذة القفل (تُرسَم فوق كل التطبيقات) — يشغّلها flutter_overlay_window.
 @pragma('vm:entry-point')
@@ -18,15 +22,73 @@ void overlayMain() {
   ));
 }
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await BreakService.instance.load();
-  // تهيئة الإشعارات وجدولتها (لا تُعطّل الإقلاع إن فشلت).
+Future<void> _safe(String name, Future<void> Function() step) async {
   try {
-    await NotifyService.instance.init();
-    await NotifyService.instance.rescheduleAll();
-  } catch (_) {}
-  runApp(const HealthReminderApp());
+    await step();
+  } catch (e) {
+    startupErrors.add('$name: $e');
+  }
+}
+
+Future<void> main() async {
+  var started = false;
+  await runZonedGuarded(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+
+    // بدل شاشة رمادية عند فشل بناء أي واجهة، نعرض نصّ الخطأ ليُصوَّر.
+    ErrorWidget.builder = (details) => Directionality(
+          textDirection: TextDirection.rtl,
+          child: Material(
+            color: Colors.white,
+            child: SafeArea(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('⚠️ خطأ — صوّر هذه الرسالة وأرسلها:',
+                        style: TextStyle(
+                            color: Colors.red, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    SelectableText('${details.exception}',
+                        style: const TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+    FlutterError.onError = (d) => startupErrors.add('Flutter: ${d.exceptionAsString()}');
+
+    await _safe('settings', () => BreakService.instance.load());
+    // ملاحظة: تهيئة الإشعارات مؤجَّلة إلى ما بعد ظهور الواجهة (في HomeScreen) كي لا
+    // تُعطّل الإقلاع أو تُخفي سببه إن فشلت.
+    runApp(const HealthReminderApp());
+    started = true;
+  }, (e, st) {
+    startupErrors.add('Uncaught: $e');
+    if (!started) runApp(_ErrorApp(message: '$e\n\n$st'));
+  });
+}
+
+class _ErrorApp extends StatelessWidget {
+  final String message;
+  const _ErrorApp({required this.message});
+  @override
+  Widget build(BuildContext context) => MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(
+            appBar: AppBar(title: const Text('تعذّر بدء التطبيق')),
+            body: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: SelectableText(message,
+                  style: const TextStyle(fontSize: 12)),
+            ),
+          ),
+        ),
+      );
 }
 
 class HealthReminderApp extends StatelessWidget {
