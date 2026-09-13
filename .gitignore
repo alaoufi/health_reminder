@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# ملفّات APK تُنشر عبر Releases لا في المستودع
+dist/*.apk

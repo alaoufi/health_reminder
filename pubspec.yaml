@@ -1,7 +1,8 @@
 name: health_reminder
 description: "لا تجلس طويلًا — مذكّر صحّي بكسر الجلوس والحركة"
 publish_to: 'none'
-version: 1.1.1+3
+# رقم الإصدار يُضبط تلقائيًّا في CI إلى 1.2.<run_number>؛ هذا الأساس للبناء المحليّ.
+version: 1.2.0+1
 
 environment:
   sdk: ^3.12.2
@@ -20,6 +21,12 @@ dependencies:
   timezone: ^0.9.4
   # نافذة نظام فوق كل التطبيقات (قفل الحركة فوق أي تطبيق)
   flutter_overlay_window: ^0.5.0
+  # التحديث الذاتيّ عبر GitHub Releases
+  http: ^1.2.0
+  path_provider: ^2.1.4
+  open_filex: ^4.5.0
+  package_info_plus: ^8.0.2
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:

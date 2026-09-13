@@ -64,21 +64,24 @@ class NotifyService {
       await _plugin.cancelAll();
       final svc = BreakService.instance;
       if (!svc.enabled) return;
-      final periods = svc.periods;
-      for (var i = 0; i < periods.length; i++) {
-        final p = periods[i];
+      // إشعار يوميّ لكل بداية راحة داخل كل نافذة عمل (مع سقف أمان).
+      var id = 100;
+      for (final p in svc.periods) {
         if (!p.enabled) continue;
-        await _plugin.zonedSchedule(
-          100 + i,
-          'حان وقت الحركة 🧘',
-          'قِف وتحرّك بهدوء دقائق — صحّتك أهمّ. افتح التطبيق للبدء.',
-          _nextInstance(p.startMinutes),
-          const NotificationDetails(android: _channel),
-          androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-          uiLocalNotificationDateInterpretation:
-              UILocalNotificationDateInterpretation.absoluteTime,
-          matchDateTimeComponents: DateTimeComponents.time, // يوميًّا
-        );
+        for (final rs in p.restStarts()) {
+          if (id > 180) break;
+          await _plugin.zonedSchedule(
+            id++,
+            'حان وقت الحركة 🧘',
+            'قِف وتحرّك بهدوء دقائق — صحّتك أهمّ. افتح التطبيق للبدء.',
+            _nextInstance(rs),
+            const NotificationDetails(android: _channel),
+            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation:
+                UILocalNotificationDateInterpretation.absoluteTime,
+            matchDateTimeComponents: DateTimeComponents.time, // يوميًّا
+          );
+        }
       }
     } catch (e) {
       debugPrint('rescheduleAll failed: $e');

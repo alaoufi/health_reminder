@@ -24,7 +24,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _periods = svc.periods
         .map((p) => BreakPeriod(
             startMinutes: p.startMinutes,
-            moveMinutes: p.moveMinutes,
+            endMinutes: p.endMinutes,
+            workMinutes: p.workMinutes,
+            restMinutes: p.restMinutes,
             enabled: p.enabled))
         .toList();
     _codeCtrl.text = svc.bypassCode;
@@ -39,15 +41,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _fmtMin(int m) =>
       '${((m ~/ 60) % 24).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}';
 
-  Future<void> _pickStart(int i) async {
-    final cur = _periods[i].startMinutes;
+  Future<void> _pickTime(int cur, ValueChanged<int> onPick) async {
     final t = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: (cur ~/ 60) % 24, minute: cur % 60),
     );
-    if (t != null) {
-      setState(() => _periods[i].startMinutes = t.hour * 60 + t.minute);
-    }
+    if (t != null) onPick(t.hour * 60 + t.minute);
   }
 
   Future<void> _save() async {
@@ -86,8 +85,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Align(
               alignment: AlignmentDirectional.centerStart,
               child: TextButton.icon(
-                onPressed: () => setState(() => _periods
-                    .add(BreakPeriod(startMinutes: 13 * 60, moveMinutes: 5))),
+                onPressed: () => setState(() => _periods.add(BreakPeriod(
+                    startMinutes: 16 * 60,
+                    endMinutes: 23 * 60,
+                    workMinutes: 60,
+                    restMinutes: 5))),
                 icon: const Icon(Icons.add),
                 label: const Text('إضافة فترة'),
               ),
@@ -149,37 +151,77 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
+            // نافذة العمل: من … إلى …
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () => _pickStart(i),
-                    icon: const Icon(Icons.schedule, size: 18),
+                    onPressed: () => _pickTime(
+                        p.startMinutes, (v) => setState(() => p.startMinutes = v)),
+                    icon: const Icon(Icons.login, size: 16),
                     label: Text('تبدأ ${_fmtMin(p.startMinutes)}'),
                   ),
                 ),
                 const SizedBox(width: 8),
-                Chip(
-                    label: Text('تنتهي ${_fmtMin(p.endMinutes)}',
-                        style: const TextStyle(fontSize: 12))),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _pickTime(
+                        p.endMinutes, (v) => setState(() => p.endMinutes = v)),
+                    icon: const Icon(Icons.logout, size: 16),
+                    label: Text('تنتهي ${_fmtMin(p.endMinutes)}'),
+                  ),
+                ),
               ],
             ),
+            // مدّة العمل المتواصل
             Row(
               children: [
-                const Text('مدّة الحركة:'),
+                const SizedBox(
+                    width: 96,
+                    child: Text('مدّة العمل:', style: TextStyle(fontSize: 13))),
                 Expanded(
                   child: Slider(
-                    value: p.moveMinutes.toDouble().clamp(1, 30),
+                    value: p.workMinutes.toDouble().clamp(5, 180),
+                    min: 5,
+                    max: 180,
+                    divisions: 35,
+                    label: '${p.workMinutes} د',
+                    onChanged: (v) => setState(() => p.workMinutes = v.round()),
+                  ),
+                ),
+                SizedBox(
+                    width: 54,
+                    child: Text('${p.workMinutes} د',
+                        style: const TextStyle(fontWeight: FontWeight.w600))),
+              ],
+            ),
+            // مدّة الراحة/الحركة
+            Row(
+              children: [
+                const SizedBox(
+                    width: 96,
+                    child: Text('مدّة الراحة:', style: TextStyle(fontSize: 13))),
+                Expanded(
+                  child: Slider(
+                    value: p.restMinutes.toDouble().clamp(1, 30),
                     min: 1,
                     max: 30,
                     divisions: 29,
-                    label: '${p.moveMinutes} د',
-                    onChanged: (v) => setState(() => p.moveMinutes = v.round()),
+                    label: '${p.restMinutes} د',
+                    onChanged: (v) => setState(() => p.restMinutes = v.round()),
                   ),
                 ),
-                Text('${p.moveMinutes} دقيقة',
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                SizedBox(
+                    width: 54,
+                    child: Text('${p.restMinutes} د',
+                        style: const TextStyle(fontWeight: FontWeight.w600))),
               ],
+            ),
+            // ملخّص: عدد الراحات المتولّدة
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text('عدد الراحات: ${p.restStarts().length}',
+                  style: TextStyle(fontSize: 12, color: scheme.primary)),
             ),
           ],
         ),

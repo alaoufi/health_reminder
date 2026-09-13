@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'break_service.dart';
+import 'features/update/force_update_gate.dart';
 import 'home_screen.dart';
 import 'overlay_break.dart';
 
@@ -123,7 +124,7 @@ class HealthReminderApp extends StatelessWidget {
           centerTitle: true,
         ),
       ),
-      home: const HomeScreen(),
+      home: const ForceUpdateGate(child: HomeScreen()),
     );
   }
 }

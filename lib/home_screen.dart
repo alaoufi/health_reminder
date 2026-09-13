@@ -75,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       // القفل فوق كل التطبيقات (نافذة نظام) عند منح الصلاحية — يبقى فوق أي تطبيق.
       if (_overlayPerm && !await FlutterOverlayWindow.isActive()) {
-        await BreakService.instance.beginOverlay(b.index, b.end);
+        await BreakService.instance.beginOverlay(b.index, b.restStart, b.end);
         await FlutterOverlayWindow.showOverlay(
           height: WindowSize.fullCover,
           width: WindowSize.matchParent,
@@ -91,7 +91,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _breakShowing = true;
       await Navigator.of(context).push(MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => BreakScreen(index: b.index, end: b.end),
+        builder: (_) =>
+            BreakScreen(index: b.index, restStart: b.restStart, end: b.end),
       ));
       _breakShowing = false;
       if (mounted) setState(() {});
@@ -105,7 +106,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await Navigator.of(context).push(MaterialPageRoute(
       fullscreenDialog: true,
       builder: (_) => BreakScreen(
-          index: 9999, end: DateTime.now().add(const Duration(minutes: 1))),
+          index: 9999,
+          restStart: 0,
+          end: DateTime.now().add(const Duration(minutes: 1))),
     ));
     _breakShowing = false;
     if (mounted) setState(() {});
@@ -239,25 +242,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               if (svc.periods.isEmpty)
                 const ListTile(title: Text('لا توجد فترات — أضِفها من الإعدادات')),
               for (var i = 0; i < svc.periods.length; i++)
-                Card(
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: svc.periods[i].enabled
-                          ? scheme.primaryContainer
-                          : scheme.surfaceContainerHighest,
-                      child: Text('${i + 1}'),
+                Builder(builder: (_) {
+                  final p = svc.periods[i];
+                  return Card(
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: p.enabled
+                            ? scheme.primaryContainer
+                            : scheme.surfaceContainerHighest,
+                        child: Text('${i + 1}'),
+                      ),
+                      title: Text(
+                          'من ${_fmtMin(p.startMinutes)} إلى ${_fmtMin(p.endMinutes)}'),
+                      subtitle: Text(
+                          'عمل ${p.workMinutes} د · راحة ${p.restMinutes} د · ${p.restStarts().length} راحات'),
+                      trailing: Icon(
+                        p.enabled
+                            ? Icons.check_circle
+                            : Icons.pause_circle_outline,
+                        color: p.enabled ? Colors.green : null,
+                      ),
                     ),
-                    title: Text(
-                        'من ${_fmtMin(svc.periods[i].startMinutes)} إلى ${_fmtMin(svc.periods[i].endMinutes)}'),
-                    subtitle: Text('مدّة الحركة: ${svc.periods[i].moveMinutes} دقيقة'),
-                    trailing: Icon(
-                      svc.periods[i].enabled
-                          ? Icons.check_circle
-                          : Icons.pause_circle_outline,
-                      color: svc.periods[i].enabled ? Colors.green : null,
-                    ),
-                  ),
-                ),
+                  );
+                }),
               const SizedBox(height: 12),
               OutlinedButton.icon(
                 onPressed: _testNow,

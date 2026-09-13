@@ -3,37 +3,65 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// فترة «كسر جلوس»: وقت البداية (دقائق من منتصف الليل) ومدّة الحركة بالدقائق.
+/// فترة عمل: نافذة زمنية [start..end] يتخلّلها **راحات متكرّرة**: بعد كل
+/// [workMinutes] عملٍ متواصل، راحة/حركة مدّتها [restMinutes].
+///
+/// مثال: من ٤م إلى ١١م، عمل ٦٠ د، راحة ٥ د ⇒ راحة كل ساعة داخل النافذة.
 class BreakPeriod {
-  int startMinutes;
-  int moveMinutes;
+  int startMinutes; // بداية النافذة (دقائق من منتصف الليل)
+  int endMinutes; // نهاية النافذة
+  int workMinutes; // مدّة العمل المتواصل قبل كل راحة
+  int restMinutes; // مدّة الراحة (الحركة)
   bool enabled;
 
   BreakPeriod({
     required this.startMinutes,
-    required this.moveMinutes,
+    required this.endMinutes,
+    required this.workMinutes,
+    required this.restMinutes,
     this.enabled = true,
   });
 
-  int get endMinutes => (startMinutes + moveMinutes).clamp(0, 24 * 60);
+  /// أوقات بدء الراحات (دقائق من منتصف الليل) المكتملة داخل النافذة.
+  List<int> restStarts() {
+    final out = <int>[];
+    if (workMinutes <= 0 || restMinutes <= 0 || endMinutes <= startMinutes) {
+      return out;
+    }
+    var t = startMinutes + workMinutes; // أوّل راحة بعد أوّل مدّة عمل
+    var guard = 0;
+    while (t + restMinutes <= endMinutes && guard < 200) {
+      out.add(t);
+      t += restMinutes + workMinutes;
+      guard++;
+    }
+    return out;
+  }
 
-  Map<String, dynamic> toJson() =>
-      {'s': startMinutes, 'm': moveMinutes, 'e': enabled};
+  Map<String, dynamic> toJson() => {
+        'st': startMinutes,
+        'en': endMinutes,
+        'w': workMinutes,
+        'r': restMinutes,
+        'e': enabled,
+      };
 
   factory BreakPeriod.fromJson(Map<String, dynamic> j) => BreakPeriod(
-        startMinutes: (j['s'] as num?)?.toInt() ?? 0,
-        moveMinutes: (j['m'] as num?)?.toInt() ?? 5,
+        startMinutes: (j['st'] as num?)?.toInt() ?? 16 * 60,
+        endMinutes: (j['en'] as num?)?.toInt() ?? 23 * 60,
+        workMinutes: (j['w'] as num?)?.toInt() ?? 60,
+        restMinutes: (j['r'] as num?)?.toInt() ?? 5,
         enabled: j['e'] as bool? ?? true,
       );
 }
 
-/// حالة التطبيق: إعداد الفترات ورمز التخطّي، ومنطق تحديد الفترة الفعّالة الآن.
+/// حالة التطبيق: فترات العمل ورمز التخطّي، ومنطق تحديد الراحة الفعّالة الآن.
 class BreakService extends ChangeNotifier {
   BreakService._();
   static final BreakService instance = BreakService._();
 
   static const _kEnabled = 'hr_enabled';
-  static const _kPeriods = 'hr_periods';
+  static const _kPeriods = 'hr_periods2'; // مفتاح جديد (نموذج نافذة+راحات)
   static const _kCode = 'hr_bypass_code';
   static const _kDone = 'hr_done_keys';
 
@@ -71,9 +99,11 @@ class BreakService extends ChangeNotifier {
   }
 
   List<BreakPeriod> _defaults() => [
-        BreakPeriod(startMinutes: 11 * 60, moveMinutes: 5),
-        BreakPeriod(startMinutes: 14 * 60, moveMinutes: 5),
-        BreakPeriod(startMinutes: 17 * 60, moveMinutes: 5),
+        BreakPeriod(
+            startMinutes: 16 * 60, // ٤ م
+            endMinutes: 23 * 60, // ١١ م
+            workMinutes: 60,
+            restMinutes: 5),
       ];
 
   Future<void> save({
@@ -102,54 +132,68 @@ class BreakService extends ChangeNotifier {
     return DateTime(n.year, n.month, n.day).add(Duration(minutes: minutes));
   }
 
-  bool _isDone(int index) => _doneKeys.contains('${_dayKey()}-$index');
+  bool _isDone(int index, int restStart) =>
+      _doneKeys.contains('${_dayKey()}-$index-$restStart');
 
-  Future<void> markDone(int index) async {
-    _doneKeys.add('${_dayKey()}-$index');
+  /// يُعلّم راحةً بعينها (فترة + وقت بدء) منجَزةً فلا تتكرّر اليوم.
+  Future<void> markDone(int index, int restStart) async {
+    _doneKeys.add('${_dayKey()}-$index-$restStart');
     try {
       final sp = await SharedPreferences.getInstance();
       await sp.setStringList(_kDone, _doneKeys.toList());
     } catch (_) {}
   }
 
-  /// يُسلّم فترة الحركة إلى نافذة القفل (فوق كل التطبيقات): يخزّن وقت الانتهاء
-  /// ليقرأه معزول النافذة، ويُعلّم الفترة منجَزةً كي لا تتكرّر اليوم.
-  Future<void> beginOverlay(int index, DateTime end) async {
-    try {
-      final sp = await SharedPreferences.getInstance();
-      await sp.setInt('hr_active_end', end.millisecondsSinceEpoch);
-    } catch (_) {}
-    await markDone(index);
-  }
-
-  /// الفترة الفعّالة الآن مع وقت انتهائها — أو null.
-  ({int index, DateTime end})? activeBreakNow() {
+  /// الراحة الفعّالة الآن (إن وُجدت): الفترة + وقت البدء + وقت الانتهاء.
+  ({int index, int restStart, DateTime end})? activeBreakNow() {
     if (!_enabled) return null;
     final now = DateTime.now();
     for (var i = 0; i < _periods.length; i++) {
       final p = _periods[i];
-      if (!p.enabled || p.moveMinutes <= 0) continue;
-      final start = _todayAt(p.startMinutes);
-      final end = start.add(Duration(minutes: p.moveMinutes));
-      if (now.isAfter(start) && now.isBefore(end) && !_isDone(i)) {
-        return (index: i, end: end);
+      if (!p.enabled) continue;
+      for (final rs in p.restStarts()) {
+        final start = _todayAt(rs);
+        final end = start.add(Duration(minutes: p.restMinutes));
+        if (now.isAfter(start) && now.isBefore(end) && !_isDone(i, rs)) {
+          return (index: i, restStart: rs, end: end);
+        }
       }
     }
     return null;
   }
 
-  /// موعد أقرب فترة قادمة اليوم/غدًا (للعرض في الرئيسية).
+  /// يخزّن وقت انتهاء الراحة لنافذة القفل، ويُعلّمها منجَزةً.
+  Future<void> beginOverlay(int index, int restStart, DateTime end) async {
+    try {
+      final sp = await SharedPreferences.getInstance();
+      await sp.setInt('hr_active_end', end.millisecondsSinceEpoch);
+    } catch (_) {}
+    await markDone(index, restStart);
+  }
+
+  /// موعد أقرب راحة قادمة (اليوم أو غدًا) — للعرض في الرئيسية.
   DateTime? nextStart() {
     if (!_enabled) return null;
     final now = DateTime.now();
     DateTime? best;
     for (final p in _periods) {
       if (!p.enabled) continue;
-      var start = _todayAt(p.startMinutes);
-      if (!start.isAfter(now)) start = start.add(const Duration(days: 1));
-      if (best == null || start.isBefore(best)) best = start;
+      for (final rs in p.restStarts()) {
+        var t = _todayAt(rs);
+        if (!t.isAfter(now)) t = t.add(const Duration(days: 1));
+        if (best == null || t.isBefore(best)) best = t;
+      }
     }
     return best;
+  }
+
+  /// كل أوقات بدء الراحات (لكل الفترات المفعّلة) — لجدولة الإشعارات.
+  List<int> allRestStarts() {
+    final out = <int>[];
+    for (final p in _periods) {
+      if (p.enabled) out.addAll(p.restStarts());
+    }
+    return out;
   }
 
   bool checkCode(String input) =>

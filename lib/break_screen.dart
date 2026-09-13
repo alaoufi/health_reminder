@@ -9,8 +9,13 @@ import 'break_service.dart';
 /// وعدّاد تنازليّ. لا تُغلق إلا بانتهاء المدّة أو إدخال الرمز المعقّد.
 class BreakScreen extends StatefulWidget {
   final int index;
+  final int restStart;
   final DateTime end;
-  const BreakScreen({super.key, required this.index, required this.end});
+  const BreakScreen(
+      {super.key,
+      required this.index,
+      required this.restStart,
+      required this.end});
 
   @override
   State<BreakScreen> createState() => _BreakScreenState();
@@ -60,7 +65,7 @@ class _BreakScreenState extends State<BreakScreen> {
 
   Future<void> _finish() async {
     _tick?.cancel();
-    await BreakService.instance.markDone(widget.index);
+    await BreakService.instance.markDone(widget.index, widget.restStart);
     if (mounted) Navigator.of(context).maybePop();
   }
 
