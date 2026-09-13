@@ -37,6 +37,12 @@ class MainActivity : FlutterActivity() {
                         }
                         result.success(true)
                     }
+                    "moveToBack" -> {
+                        // أرسِل المهمّة إلى الخلفية ليعود المستخدم إلى التطبيق
+                        // السابق بعد انتهاء الاستراحة (بدل البقاء على هذا التطبيق).
+                        moveTaskToBack(true)
+                        result.success(true)
+                    }
                     "install" -> {
                         val path = call.argument<String>("path")
                         if (path == null) {

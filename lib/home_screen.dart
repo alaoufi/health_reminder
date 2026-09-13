@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
 import 'break_screen.dart';
@@ -21,6 +22,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _breakShowing = false;
   bool _starting = false;
   bool _overlayPerm = false;
+
+  /// قناة أصليّة لإرسال التطبيق إلى الخلفية (العودة للتطبيق السابق).
+  static const _platform =
+      MethodChannel('com.alaoufi.health_reminder/installer');
 
   @override
   void initState() {
@@ -84,6 +89,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           overlayTitle: 'لا تجلس طويلًا',
           enableDrag: false,
         );
+        // أرسِل التطبيق للخلفية لتطفو النافذة فوق التطبيق السابق؛ فعند إغلاقها
+        // يعود المستخدم إلى ما كان يستخدمه بدل رئيسية «لا تجلس طويلًا».
+        try {
+          await _platform.invokeMethod('moveToBack');
+        } catch (_) {}
         return;
       }
       // احتياط داخل التطبيق (بلا صلاحية العرض فوق التطبيقات).
@@ -91,8 +101,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _breakShowing = true;
       await Navigator.of(context).push(MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) =>
-            BreakScreen(index: b.index, restStart: b.restStart, end: b.end),
+        builder: (_) => BreakScreen(
+            index: b.index,
+            restStart: b.restStart,
+            end: b.end,
+            moveToBackOnClose: true),
       ));
       _breakShowing = false;
       if (mounted) setState(() {});

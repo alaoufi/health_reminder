@@ -21,6 +21,7 @@ class _OverlayBreakState extends State<OverlayBreak> {
   Duration _remaining = Duration.zero;
   int _phase = 0;
   bool _closed = false;
+  bool _showPhrases = true; // عرض العبارات أم شاشة صامتة بعدّاد فقط
 
   /// سقف أقصى مطلق لمدّة القفل — مهما كانت البيانات، تُغلق النافذة خلاله.
   static const Duration _maxCap = Duration(minutes: 30);
@@ -66,6 +67,7 @@ class _OverlayBreakState extends State<OverlayBreak> {
       final fm = sp.getInt('hr_active_minutes');
       if (fm != null && fm > 0) fallbackMins = fm;
       _code = sp.getString('hr_bypass_code') ?? '';
+      _showPhrases = sp.getBool('hr_show_phrases') ?? true;
       if (ms != null) end = DateTime.fromMillisecondsSinceEpoch(ms);
     } catch (_) {}
 
@@ -232,14 +234,15 @@ class _OverlayBreakState extends State<OverlayBreak> {
                               fontSize: 28,
                               fontWeight: FontWeight.bold)),
                       const SizedBox(height: 22),
-                      Text(phrase,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              height: 1.8,
-                              fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 28),
+                      if (_showPhrases)
+                        Text(phrase,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                height: 1.8,
+                                fontWeight: FontWeight.w600)),
+                      if (_showPhrases) const SizedBox(height: 28),
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 26, vertical: 12),

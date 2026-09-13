@@ -13,6 +13,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   late bool _enabled;
+  late bool _showPhrases;
   late List<BreakPeriod> _periods;
   final _codeCtrl = TextEditingController();
 
@@ -21,6 +22,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     final svc = BreakService.instance;
     _enabled = svc.enabled;
+    _showPhrases = svc.showPhrases;
     _periods = svc.periods
         .map((p) => BreakPeriod(
             startMinutes: p.startMinutes,
@@ -50,8 +52,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _save() async {
-    await BreakService.instance
-        .save(enabled: _enabled, periods: _periods, bypassCode: _codeCtrl.text);
+    await BreakService.instance.save(
+        enabled: _enabled,
+        periods: _periods,
+        bypassCode: _codeCtrl.text,
+        showPhrases: _showPhrases);
     await NotifyService.instance.rescheduleAll();
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -72,6 +77,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onChanged: (v) => setState(() => _enabled = v),
             title: const Text('تفعيل التنبيه',
                 style: TextStyle(fontWeight: FontWeight.bold)),
+            contentPadding: EdgeInsets.zero,
+          ),
+          SwitchListTile(
+            value: _showPhrases,
+            onChanged: (v) => setState(() => _showPhrases = v),
+            title: const Text('عرض العبارات التحفيزية',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(_showPhrases
+                ? 'تظهر عبارات صحّية متغيّرة على شاشة الاستراحة.'
+                : 'شاشة صامتة بعدّاد فقط بلا عبارات.'),
             contentPadding: EdgeInsets.zero,
           ),
           const Divider(),
