@@ -15,10 +15,18 @@ class OverlayBreak extends StatefulWidget {
 
 class _OverlayBreakState extends State<OverlayBreak> {
   Timer? _tick;
+  Timer? _safety; // خطّ أمان مستقلّ: يُغلق النافذة مهما تعطّل المؤقّت الرئيسيّ.
   DateTime? _end;
   String _code = '';
   Duration _remaining = Duration.zero;
   int _phase = 0;
+  bool _closed = false;
+
+  /// سقف أقصى مطلق لمدّة القفل — مهما كانت البيانات، تُغلق النافذة خلاله.
+  static const Duration _maxCap = Duration(minutes: 30);
+
+  /// مدّة بديلة إن تعذّر تحديد وقت الانتهاء (لئلّا تبقى النافذة بلا نهاية).
+  static const int _fallbackMinutes = 5;
 
   static const List<List<Color>> _gradients = [
     [Color(0xFF134E5E), Color(0xFF71B280)],
@@ -45,31 +53,68 @@ class _OverlayBreakState extends State<OverlayBreak> {
   }
 
   Future<void> _load() async {
+    DateTime? end;
+    var fallbackMins = _fallbackMinutes;
     try {
       final sp = await SharedPreferences.getInstance();
       final ms = sp.getInt('hr_active_end');
+      final fm = sp.getInt('hr_active_minutes');
+      if (fm != null && fm > 0) fallbackMins = fm;
       _code = sp.getString('hr_bypass_code') ?? '';
-      _end = ms != null ? DateTime.fromMillisecondsSinceEpoch(ms) : null;
+      if (ms != null) end = DateTime.fromMillisecondsSinceEpoch(ms);
     } catch (_) {}
+
+    final now = DateTime.now();
+    // لا نترك النافذة بلا نهاية صالحة إطلاقًا (وإلا يتجمّد الجهاز بلا عدّاد).
+    end ??= now.add(Duration(minutes: fallbackMins));
+    // سقف أمان: مهما فسدت البيانات، تُغلق النافذة خلال الحدّ الأقصى.
+    final maxEnd = now.add(_maxCap);
+    if (end.isAfter(maxEnd)) end = maxEnd;
+    _end = end;
+
+    // لو انتهى الوقت فعلًا (بيانات قديمة) أغلق فورًا بدل حبس المستخدم.
+    if (!end.isAfter(now)) {
+      _close();
+      return;
+    }
+
+    // اعرض العدّاد فورًا بلا ثانية «00:00» أولى.
+    if (mounted) setState(() => _remaining = end!.difference(now));
+
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      final end = _end;
-      if (end == null) return;
-      final r = end.difference(DateTime.now());
+      final e = _end;
+      if (e == null) {
+        _close();
+        return;
+      }
+      final r = e.difference(DateTime.now());
       if (r <= Duration.zero) {
         _close();
-      } else {
+      } else if (mounted) {
         setState(() {
           _remaining = r;
           _phase = DateTime.now().second ~/ 6;
         });
       }
     });
+
+    // خطّ أمان مستقلّ عن المؤقّت الرئيسيّ: إغلاق مضمون خلال السقف الأقصى.
+    _safety = Timer(_maxCap + const Duration(seconds: 2), _close);
   }
 
   Future<void> _close() async {
+    if (_closed) return; // إغلاق مرّة واحدة (idempotent)
+    _closed = true;
     _tick?.cancel();
+    _safety?.cancel();
     try {
       await FlutterOverlayWindow.closeOverlay();
+    } catch (_) {}
+    // نظّف علامة النشاط حتى لا تُقرأ نهاية قديمة في مرّة لاحقة.
+    try {
+      final sp = await SharedPreferences.getInstance();
+      await sp.remove('hr_active_end');
+      await sp.remove('hr_active_minutes');
     } catch (_) {}
   }
 
@@ -109,6 +154,7 @@ class _OverlayBreakState extends State<OverlayBreak> {
   @override
   void dispose() {
     _tick?.cancel();
+    _safety?.cancel();
     super.dispose();
   }
 
