@@ -1,7 +1,21 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// إعداد التوقيع يُقرأ من android/key.properties المحليّ (غير متعقَّب).
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+val hasKeystore = keystorePropertiesFile.exists()
+if (hasKeystore) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+} else {
+    logger.warn("⚠️  android/key.properties مفقود — سيُوقَّع الإصدار بمفتاح debug. " +
+        "للنشر: ضع health-release.jks و key.properties بمفتاح النشر نفسه.")
 }
 
 android {
@@ -25,10 +39,25 @@ android {
         multiDexEnabled = true
     }
 
+    signingConfigs {
+        if (hasKeystore) {
+            create("release") {
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // توقيع debug مؤقّتًا كي يعمل flutter run --release (يُستبدل بمفتاح نشر).
-            signingConfig = signingConfigs.getByName("debug")
+            // مفتاح النشر إن وُجد key.properties، وإلا توقيع debug (للتطوير فقط).
+            signingConfig = if (hasKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
