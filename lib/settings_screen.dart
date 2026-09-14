@@ -48,6 +48,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _fmtMin(int m) =>
       '${((m ~/ 60) % 24).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}';
 
+  /// صفّ اختيار بقيم محدّدة (أزرار) بدل شريط التمرير.
+  Widget _choiceRow(
+      String label, int value, List<int> options, ValueChanged<int> onPick) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: SizedBox(
+                width: 96,
+                child: Text(label, style: const TextStyle(fontSize: 13))),
+          ),
+          Expanded(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final o in options)
+                  ChoiceChip(
+                    label: Text('$o د'),
+                    selected: value == o,
+                    onSelected: (_) => onPick(o),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _pickTime(int cur, ValueChanged<int> onPick) async {
     final t = await showTimePicker(
       context: context,
@@ -201,29 +234,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             '$_idleResetMinutes دقيقة، تُحتسب راحةً ويعود عدّاد العمل للصفر.',
             style: const TextStyle(fontSize: 13, height: 1.5),
           ),
-          Row(
-            children: [
-              const SizedBox(
-                  width: 110,
-                  child:
-                      Text('مدّة الخمول:', style: TextStyle(fontSize: 13))),
-              Expanded(
-                child: Slider(
-                  value: _idleResetMinutes.toDouble().clamp(5, 60),
-                  min: 5,
-                  max: 60,
-                  divisions: 11,
-                  label: '$_idleResetMinutes د',
-                  onChanged: (v) =>
-                      setState(() => _idleResetMinutes = v.round()),
-                ),
-              ),
-              SizedBox(
-                  width: 54,
-                  child: Text('$_idleResetMinutes د',
-                      style: const TextStyle(fontWeight: FontWeight.w600))),
-            ],
-          ),
+          _choiceRow('مدّة الخمول:', _idleResetMinutes, const [10, 15, 20, 30],
+              (v) => setState(() => _idleResetMinutes = v)),
           const Divider(),
           const SizedBox(height: 4),
           Text('الفترات (حتى ٣)',
@@ -354,50 +366,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
-            // مدّة العمل المتواصل
-            Row(
-              children: [
-                const SizedBox(
-                    width: 96,
-                    child: Text('مدّة العمل:', style: TextStyle(fontSize: 13))),
-                Expanded(
-                  child: Slider(
-                    value: p.workMinutes.toDouble().clamp(5, 180),
-                    min: 5,
-                    max: 180,
-                    divisions: 35,
-                    label: '${p.workMinutes} د',
-                    onChanged: (v) => setState(() => p.workMinutes = v.round()),
-                  ),
-                ),
-                SizedBox(
-                    width: 54,
-                    child: Text('${p.workMinutes} د',
-                        style: const TextStyle(fontWeight: FontWeight.w600))),
-              ],
-            ),
-            // مدّة الراحة/الحركة
-            Row(
-              children: [
-                const SizedBox(
-                    width: 96,
-                    child: Text('مدّة الراحة:', style: TextStyle(fontSize: 13))),
-                Expanded(
-                  child: Slider(
-                    value: p.restMinutes.toDouble().clamp(1, 30),
-                    min: 1,
-                    max: 30,
-                    divisions: 29,
-                    label: '${p.restMinutes} د',
-                    onChanged: (v) => setState(() => p.restMinutes = v.round()),
-                  ),
-                ),
-                SizedBox(
-                    width: 54,
-                    child: Text('${p.restMinutes} د',
-                        style: const TextStyle(fontWeight: FontWeight.w600))),
-              ],
-            ),
+            // مدّة العمل المتواصل — خيارات محدّدة
+            _choiceRow('مدّة العمل:', p.workMinutes, const [30, 60, 90, 120],
+                (v) => setState(() => p.workMinutes = v)),
+            // مدّة الراحة/الحركة — خيارات محدّدة
+            _choiceRow('مدّة الراحة:', p.restMinutes, const [5, 10, 15, 20],
+                (v) => setState(() => p.restMinutes = v)),
             // ملخّص: عدد الراحات المتولّدة
             Align(
               alignment: AlignmentDirectional.centerStart,
