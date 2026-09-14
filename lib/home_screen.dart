@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
 import 'backup_service.dart';
-import 'break_alarm.dart';
 import 'break_screen.dart';
 import 'break_service.dart';
 import 'notify_service.dart';
@@ -43,12 +42,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         await NotifyService.instance.init();
         await NotifyService.instance.rescheduleAll();
       } catch (_) {}
+      await _scheduleNativeBreak(); // المنبّه الدقيق (setAlarmClock) — الأوثق.
       _check();
     });
     _timer = Timer.periodic(const Duration(seconds: 20), (_) {
       if (mounted) setState(() {}); // تحديث «راحتك القادمة بعد …» بشكل تنازليّ
       _check();
     });
+  }
+
+  /// يجدول منبّه الراحة القادمة عبر القناة الأصليّة (setAlarmClock) — أوثق طريقة
+  /// للظهور في الوقت بالضبط والتطبيق مغلق (يحترمها MIUI ومعفاة من توفير الطاقة).
+  Future<void> _scheduleNativeBreak() async {
+    try {
+      final svc = BreakService.instance;
+      final n = svc.nextStart();
+      if (!svc.enabled || n == null) {
+        await _platform.invokeMethod('cancelExactBreak');
+      } else {
+        await _platform.invokeMethod(
+            'scheduleExactBreak', {'epoch': n.millisecondsSinceEpoch});
+      }
+    } catch (_) {}
   }
 
   Future<void> _refreshPerm() async {
@@ -105,6 +120,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _refreshPerm();
       _check();
+      _scheduleNativeBreak(); // أعِد جدولة الراحة القادمة عند العودة للتطبيق.
     }
   }
 
@@ -121,27 +137,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (b == null) return;
     _starting = true;
     try {
-      // القفل فوق كل التطبيقات (نافذة نظام) عند منح الصلاحية — يبقى فوق أي تطبيق.
-      if (_overlayPerm && !await FlutterOverlayWindow.isActive()) {
-        await BreakService.instance.beginOverlay(b.index, b.restStart, b.end);
-        await FlutterOverlayWindow.showOverlay(
-          height: WindowSize.fullCover,
-          width: WindowSize.matchParent,
-          alignment: OverlayAlignment.center,
-          flag: OverlayFlag.focusPointer,
-          overlayTitle: 'لا تجلس طويلًا',
-          enableDrag: false,
-        );
-        // طبقة أمان: إغلاق مستقلّ عند نهاية الراحة (يمنع بقاء الشاشة عالقةً).
-        await BreakAlarm.scheduleClose(b.end);
-        // أرسِل التطبيق للخلفية لتطفو النافذة فوق التطبيق السابق؛ فعند إغلاقها
-        // يعود المستخدم إلى ما كان يستخدمه بدل رئيسية «لا تجلس طويلًا».
-        try {
-          await _platform.invokeMethod('moveToBack');
-        } catch (_) {}
-        return;
-      }
-      // احتياط داخل التطبيق (بلا صلاحية العرض فوق التطبيقات).
+      // القفل الصارم: شاشة استراحة داخليّة (نشاط حقيقيّ) تغطّي كامل الشاشة، عدّادها
+      // وإغلاقها موثوقان في العزلة الرئيسيّة — يفتحها منبّه setAlarmClock الدقيق.
+      await BreakService.instance.beginOverlay(b.index, b.restStart, b.end);
+      // نظّف إشعار ملء الشاشة (إن جاء الفتح منه) وجدوِل الراحة القادمة مسبقًا.
+      try {
+        await _platform.invokeMethod('clearBreakNotification');
+      } catch (_) {}
+      await _scheduleNativeBreak();
       if (!mounted) return;
       _breakShowing = true;
       await Navigator.of(context).push(MaterialPageRoute(
@@ -153,6 +156,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             moveToBackOnClose: true),
       ));
       _breakShowing = false;
+      // بعد الإغلاق: تأكّد من جدولة الراحة القادمة.
+      await _scheduleNativeBreak();
       if (mounted) setState(() {});
     } finally {
       _starting = false;
@@ -216,6 +221,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             onPressed: () async {
               await Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const SettingsScreen()));
+              await _scheduleNativeBreak();
               if (mounted) setState(() {});
             },
           ),
@@ -270,6 +276,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 onChanged: (v) async {
                   await svc.save(enabled: v);
                   await NotifyService.instance.rescheduleAll();
+                  await _scheduleNativeBreak();
                   await BackupService.write(svc.exportJson()); // نسخة على الجهاز
                 },
                 title: const Text('تشغيل/إيقاف',
@@ -432,6 +439,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 onPressed: () async {
                   await Navigator.of(context).push(MaterialPageRoute(
                       builder: (_) => const SettingsScreen()));
+                  await _scheduleNativeBreak();
                   if (mounted) setState(() {});
                 },
                 icon: const Icon(Icons.tune),

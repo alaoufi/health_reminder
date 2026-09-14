@@ -32,6 +32,8 @@
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -48,6 +50,11 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+
+        <!-- مُستقبِل منبّه الراحة (setAlarmClock): يعرض إشعار ملء الشاشة في وقتها -->
+        <receiver
+            android:name=".BreakAlarmReceiver"
+            android:exported="false" />
 
         <!-- مستقبِلات flutter_local_notifications للجدولة وإعادة الجدولة بعد الإقلاع -->
         <receiver android:exported="false"
