@@ -40,7 +40,15 @@ jobs:
       - name: Prepare signing
         if: ${{ env.KEYSTORE_BASE64 != '' }}
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > android/app/health-release.jks
+          # نتسامح مع المسافات والأسطر الزائدة عند لصق قيمة السرّ (تجاهل الفراغات).
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d \
+            > android/app/health-release.jks
+          # تحقّق أنّ الملفّ الناتج مفتاح صالح، وإلا أوقف البناء برسالة واضحة.
+          if ! keytool -list -keystore android/app/health-release.jks \
+              -storepass "$STORE_PASSWORD" >/dev/null 2>&1; then
+            echo "::error::KEYSTORE_BASE64 أو STORE_PASSWORD غير صحيح — أعد لصق قيمة السرّ نظيفة."
+            exit 1
+          fi
           cat > android/key.properties <<EOF
           storeFile=health-release.jks
           storePassword=$STORE_PASSWORD
