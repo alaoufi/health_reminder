@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
 import 'backup_service.dart';
+import 'break_alarm.dart';
 import 'break_screen.dart';
 import 'break_service.dart';
 import 'notify_service.dart';
@@ -125,6 +126,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           overlayTitle: 'لا تجلس طويلًا',
           enableDrag: false,
         );
+        // طبقة أمان: إغلاق مستقلّ عند نهاية الراحة (يمنع بقاء الشاشة عالقةً).
+        await BreakAlarm.scheduleClose(b.end);
         // أرسِل التطبيق للخلفية لتطفو النافذة فوق التطبيق السابق؛ فعند إغلاقها
         // يعود المستخدم إلى ما كان يستخدمه بدل رئيسية «لا تجلس طويلًا».
         try {

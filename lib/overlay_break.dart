@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show DartPluginRegistrant;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -56,42 +57,24 @@ class _OverlayBreakState extends State<OverlayBreak> {
   @override
   void initState() {
     super.initState();
+    // تسجيل الإضافات في عزلة النافذة المنفصلة — بدونه تتعلّق نداءات الإضافات
+    // (قراءة الوقت/إغلاق النافذة) بلا نهاية فتتجمّد الشاشة على 00:00 بلا إغلاق.
+    try {
+      DartPluginRegistrant.ensureInitialized();
+    } catch (_) {}
     // وضع غامر: يُخفي شريطي الحالة والتنقّل ليُغطّي القفل الشاشة كاملة بلا منفذ خروج.
     try {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     } catch (_) {}
-    _load();
+    _start();
   }
 
-  Future<void> _load() async {
-    DateTime? end;
-    var fallbackMins = _fallbackMinutes;
-    try {
-      final sp = await SharedPreferences.getInstance();
-      final ms = sp.getInt('hr_active_end');
-      final fm = sp.getInt('hr_active_minutes');
-      if (fm != null && fm > 0) fallbackMins = fm;
-      _code = sp.getString('hr_bypass_code') ?? '';
-      _showPhrases = sp.getBool('hr_show_phrases') ?? true;
-      if (ms != null) end = DateTime.fromMillisecondsSinceEpoch(ms);
-    } catch (_) {}
-
+  /// يبدأ العدّاد **فورًا** بمدّة بديلة ثمّ يحسّن النهاية من التخزين — كي لا يتجمّد
+  /// أبدًا على 00:00 مهما تعثّرت قراءة التخزين في عزلة النافذة.
+  void _start() {
     final now = DateTime.now();
-    // لا نترك النافذة بلا نهاية صالحة إطلاقًا (وإلا يتجمّد الجهاز بلا عدّاد).
-    end ??= now.add(Duration(minutes: fallbackMins));
-    // سقف أمان: مهما فسدت البيانات، تُغلق النافذة خلال الحدّ الأقصى.
-    final maxEnd = now.add(_maxCap);
-    if (end.isAfter(maxEnd)) end = maxEnd;
-    _end = end;
-
-    // لو انتهى الوقت فعلًا (بيانات قديمة) أغلق فورًا بدل حبس المستخدم.
-    if (!end.isAfter(now)) {
-      _close();
-      return;
-    }
-
-    // اعرض العدّاد فورًا بلا ثانية «00:00» أولى.
-    if (mounted) setState(() => _remaining = end!.difference(now));
+    _end = now.add(const Duration(minutes: _fallbackMinutes));
+    if (mounted) setState(() => _remaining = _end!.difference(now));
 
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
       final e = _end;
@@ -110,8 +93,49 @@ class _OverlayBreakState extends State<OverlayBreak> {
       }
     });
 
-    // خطّ أمان مستقلّ عن المؤقّت الرئيسيّ: إغلاق مضمون خلال السقف الأقصى.
+    // خطّ أمان مستقلّ: إغلاق مضمون خلال السقف الأقصى مهما تعطّل غيره.
     _safety = Timer(_maxCap + const Duration(seconds: 2), _close);
+
+    _loadData(); // يحسّن النهاية والرمز من التخزين (بمهلة قصيرة لا تتعلّق).
+  }
+
+  /// قراءة وقت الانتهاء والرمز من التخزين **بمهلة** — إن تعذّرت، تبقى المدّة
+  /// البديلة عاملةً (لا تجمّد).
+  Future<void> _loadData() async {
+    try {
+      final sp = await SharedPreferences.getInstance()
+          .timeout(const Duration(seconds: 2));
+      final now = DateTime.now();
+      final ms = sp.getInt('hr_active_end');
+      final fm = sp.getInt('hr_active_minutes');
+      final code = sp.getString('hr_bypass_code') ?? '';
+      final showP = sp.getBool('hr_show_phrases') ?? true;
+
+      DateTime? end;
+      if (ms != null) {
+        end = DateTime.fromMillisecondsSinceEpoch(ms);
+      } else if (fm != null && fm > 0) {
+        end = now.add(Duration(minutes: fm));
+      }
+      if (end != null) {
+        final maxEnd = now.add(_maxCap);
+        if (end.isAfter(maxEnd)) end = maxEnd;
+        if (!end.isAfter(now)) {
+          _close(); // بيانات منتهية فعلًا — أغلق فورًا.
+          return;
+        }
+        _end = end;
+      }
+      if (mounted) {
+        setState(() {
+          _code = code;
+          _showPhrases = showP;
+          if (_end != null) _remaining = _end!.difference(DateTime.now());
+        });
+      }
+    } catch (_) {
+      // نُبقي المدّة البديلة العاملة.
+    }
   }
 
   Future<void> _close() async {
@@ -120,16 +144,25 @@ class _OverlayBreakState extends State<OverlayBreak> {
     _tick?.cancel();
     _safety?.cancel();
     _holdTimer?.cancel();
-    // استعادة شريطي الحالة والتنقّل قبل إغلاق النافذة.
+    // استعادة شريطي الحالة والتنقّل قبل إغلاق النافذة (بمهلة لئلّا تتعلّق).
     try {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge)
+          .timeout(const Duration(seconds: 1));
     } catch (_) {}
+    // إغلاق النافذة — الأهمّ. بمهلة، ونعيد المحاولة مرّة إن تعثّرت أوّلًا.
     try {
-      await FlutterOverlayWindow.closeOverlay();
-    } catch (_) {}
-    // نظّف علامة النشاط حتى لا تُقرأ نهاية قديمة في مرّة لاحقة.
+      await FlutterOverlayWindow.closeOverlay()
+          .timeout(const Duration(seconds: 2));
+    } catch (_) {
+      try {
+        await FlutterOverlayWindow.closeOverlay()
+            .timeout(const Duration(seconds: 2));
+      } catch (_) {}
+    }
+    // نظّف علامة النشاط حتى لا تُقرأ نهاية قديمة في مرّة لاحقة (بمهلة).
     try {
-      final sp = await SharedPreferences.getInstance();
+      final sp = await SharedPreferences.getInstance()
+          .timeout(const Duration(seconds: 2));
       await sp.remove('hr_active_end');
       await sp.remove('hr_active_minutes');
     } catch (_) {}

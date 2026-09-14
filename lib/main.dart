@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/material.dart';
@@ -13,12 +14,20 @@ import 'overlay_break.dart';
 final List<String> startupErrors = [];
 
 /// نقطة دخول نافذة القفل (تُرسَم فوق كل التطبيقات) — يشغّلها flutter_overlay_window.
+///
+/// مهمّ: عزلة النافذة منفصلة، فيجب تهيئة الربط وتسجيل الإضافات فيها؛ وإلّا تتعلّق
+/// نداءات الإضافات (SharedPreferences/closeOverlay) بلا نهاية فتتجمّد الشاشة على
+/// 00:00 بلا إغلاق (السبب الجذريّ للتجمّد الذي أجبر على إعادة تشغيل الجهاز).
 @pragma('vm:entry-point')
 void overlayMain() {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    DartPluginRegistrant.ensureInitialized();
+  } catch (_) {}
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
     home: Scaffold(
-      backgroundColor: Colors.transparent,
+      backgroundColor: Colors.black,
       body: OverlayBreak(),
     ),
   ));
