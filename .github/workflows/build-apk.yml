@@ -42,19 +42,22 @@ jobs:
         run: |
           # نتسامح مع المسافات والأسطر الزائدة عند لصق قيمة السرّ (تجاهل الفراغات).
           printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d \
-            > android/app/health-release.jks
-          # تحقّق أنّ الملفّ الناتج مفتاح صالح، وإلا أوقف البناء برسالة واضحة.
-          if ! keytool -list -keystore android/app/health-release.jks \
+            > android/app/health-release.jks 2>/dev/null || true
+          # إن كان المفتاح صالحًا: وقّع بالنشر. وإلا: تراجَع لتوقيع debug (لا نُفشل
+          # البناء كلّه بسبب سرّ خاطئ) مع تحذير واضح لتصحيح السرّ لاحقًا.
+          if keytool -list -keystore android/app/health-release.jks \
               -storepass "$STORE_PASSWORD" >/dev/null 2>&1; then
-            echo "::error::KEYSTORE_BASE64 أو STORE_PASSWORD غير صحيح — أعد لصق قيمة السرّ نظيفة."
-            exit 1
+            {
+              echo "storeFile=health-release.jks"
+              echo "storePassword=$STORE_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "keyPassword=$KEY_PASSWORD"
+            } > android/key.properties
+            echo "✅ سيُوقَّع الإصدار بمفتاح النشر الثابت."
+          else
+            echo "::warning::KEYSTORE_BASE64/STORE_PASSWORD غير صالح — بناء بتوقيع debug مؤقّتًا. صحّح قيمة السرّ لتثبيت التوقيع."
+            rm -f android/app/health-release.jks android/key.properties
           fi
-          cat > android/key.properties <<EOF
-          storeFile=health-release.jks
-          storePassword=$STORE_PASSWORD
-          keyAlias=$KEY_ALIAS
-          keyPassword=$KEY_PASSWORD
-          EOF
 
       - run: flutter pub get
 
