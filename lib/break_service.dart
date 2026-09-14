@@ -66,11 +66,13 @@ class BreakService extends ChangeNotifier {
   static const _kDone = 'hr_done_keys';
   static const _kShowPhrases = 'hr_show_phrases'; // عرض العبارات أم شاشة صامتة
   static const _kIdleReset = 'hr_idle_reset'; // عتبة الخمول (دقائق) لاعتباره راحة
+  static const _kAnchor = 'hr_anchor'; // مرساة الدورة: بداية شوط العمل الحاليّ
 
   bool _enabled = true;
   List<BreakPeriod> _periods = [];
   String _bypassCode = '';
   Set<String> _doneKeys = {};
+  DateTime? _anchor; // آخر بداية شوط عمل — الراحة القادمة = المرساة + مدّة العمل
   bool _showPhrases = true; // true: عبارات تحفيزية، false: شاشة صامتة بعدّاد فقط
   int _idleResetMinutes = 15; // خمول ≥ هذه المدّة (بإطفاء الشاشة) يُصفّر عدّاد العمل
   bool _wasFresh = false; // true إن لم تكن هناك إعدادات محفوظة عند التحميل (تثبيت جديد)
@@ -101,6 +103,8 @@ class BreakService extends ChangeNotifier {
         _wasFresh = true; // لا إعدادات محفوظة ⇒ تثبيت جديد (حاول الاستعادة).
         _periods = _defaults();
       }
+      final am = sp.getInt(_kAnchor);
+      _anchor = am != null ? DateTime.fromMillisecondsSinceEpoch(am) : null;
       final today = _dayKey();
       _doneKeys = (sp.getStringList(_kDone) ?? const [])
           .where((k) => k.startsWith('$today-'))
@@ -113,8 +117,8 @@ class BreakService extends ChangeNotifier {
 
   List<BreakPeriod> _defaults() => [
         BreakPeriod(
-            startMinutes: 16 * 60, // ٤ م
-            endMinutes: 23 * 60, // ١١ م
+            startMinutes: 0, // طوال اليوم افتراضيًّا (يعمل في أي وقت)
+            endMinutes: 24 * 60 - 1, // ٢٣:٥٩
             workMinutes: 60,
             restMinutes: 5),
       ];
@@ -133,6 +137,9 @@ class BreakService extends ChangeNotifier {
     if (idleResetMinutes != null) {
       _idleResetMinutes = idleResetMinutes.clamp(1, 120);
     }
+    // أعِد ضبط المرساة على «الآن» عند أي حفظ للإعدادات وهي مفعّلة — فتصبح الراحة
+    // القادمة = الآن + مدّة العمل (يبدأ العدّ من لحظة الحفظ لا من بداية النافذة).
+    _anchor = _enabled ? DateTime.now() : null;
     final sp = await SharedPreferences.getInstance();
     await sp.setBool(_kEnabled, _enabled);
     await sp.setString(
@@ -140,7 +147,22 @@ class BreakService extends ChangeNotifier {
     await sp.setString(_kCode, _bypassCode);
     await sp.setBool(_kShowPhrases, _showPhrases);
     await sp.setInt(_kIdleReset, _idleResetMinutes);
+    if (_anchor != null) {
+      await sp.setInt(_kAnchor, _anchor!.millisecondsSinceEpoch);
+    } else {
+      await sp.remove(_kAnchor);
+    }
     notifyListeners();
+  }
+
+  /// يضبط المرساة (بداية شوط العمل) ويحفظها — يُستدعى عند بدء الراحة (نهايتها تصبح
+  /// المرساة الجديدة) فتتدحرج الدورة: الراحة التالية = نهاية هذه الراحة + مدّة العمل.
+  Future<void> setAnchor(DateTime t) async {
+    _anchor = t;
+    try {
+      final sp = await SharedPreferences.getInstance();
+      await sp.setInt(_kAnchor, t.millisecondsSinceEpoch);
+    } catch (_) {}
   }
 
   String _dayKey([DateTime? d]) {
@@ -165,56 +187,80 @@ class BreakService extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// الراحة الفعّالة الآن (إن وُجدت): الفترة + وقت البدء + وقت الانتهاء.
-  ({int index, int restStart, DateTime end})? activeBreakNow() {
-    if (!_enabled) return null;
-    final now = DateTime.now();
-    for (var i = 0; i < _periods.length; i++) {
-      final p = _periods[i];
+  /// الفترة المفعّلة التي يقع «الآن» ضمن نافذتها (أو null).
+  BreakPeriod? _periodActiveAt(DateTime now) {
+    for (final p in _periods) {
       if (!p.enabled) continue;
-      for (final rs in p.restStarts()) {
-        final start = _todayAt(rs);
-        final end = start.add(Duration(minutes: p.restMinutes));
-        if (now.isAfter(start) && now.isBefore(end) && !_isDone(i, rs)) {
-          return (index: i, restStart: rs, end: end);
-        }
-      }
+      final ws = _todayAt(p.startMinutes);
+      final we = _todayAt(p.endMinutes);
+      if (!now.isBefore(ws) && now.isBefore(we)) return p;
     }
     return null;
   }
 
-  /// يخزّن وقت انتهاء الراحة لنافذة القفل، ويُعلّمها منجَزةً.
-  ///
-  /// نخزّن أيضًا **مدّة الراحة بالدقائق** كخطّ أمان: إن تعذّر على عزلة النافذة
-  /// قراءة وقت الانتهاء، تحسب نهاية بديلة من هذه المدّة بدل أن تبقى بلا نهاية
-  /// (وهو ما كان يحبس الجهاز بلا عدّاد).
+  /// الراحة القادمة (وقت البدء + مدّة الراحة) بنموذج **التدحرج من الآن**:
+  /// داخل نافذة نشطة ⇒ المرساة + مدّة العمل؛ خارجها ⇒ أقرب بداية نافذة + مدّة العمل.
+  ({DateTime start, int rest})? _nextBreak() {
+    if (!_enabled) return null;
+    final now = DateTime.now();
+    final anchor = _anchor ?? now;
+    final active = _periodActiveAt(now);
+    if (active != null) {
+      final ws = _todayAt(active.startMinutes);
+      final we = _todayAt(active.endMinutes);
+      var nb = anchor.add(Duration(minutes: active.workMinutes));
+      if (nb.isBefore(ws)) nb = ws.add(Duration(minutes: active.workMinutes));
+      // فات تمامًا (تجاوز نهاية الراحة) ⇒ ابدأ دورة جديدة من الآن.
+      if (!nb.add(Duration(minutes: active.restMinutes)).isAfter(now)) {
+        nb = now.add(Duration(minutes: active.workMinutes));
+      }
+      if (nb.isBefore(we)) return (start: nb, rest: active.restMinutes);
+    }
+    // خارج النوافذ: أقرب بداية فترة قادمة + مدّة العمل.
+    DateTime? best;
+    int bestRest = 5;
+    for (final p in _periods) {
+      if (!p.enabled) continue;
+      var ws = _todayAt(p.startMinutes);
+      if (!ws.isAfter(now)) ws = ws.add(const Duration(days: 1));
+      final cand = ws.add(Duration(minutes: p.workMinutes));
+      if (best == null || cand.isBefore(best)) {
+        best = cand;
+        bestRest = p.restMinutes;
+      }
+    }
+    if (best == null) return null;
+    return (start: best, rest: bestRest);
+  }
+
+  /// الراحة الفعّالة الآن (إن حان وقتها ولم تنتهِ بعد).
+  ({int index, int restStart, DateTime end})? activeBreakNow() {
+    final nb = _nextBreak();
+    if (nb == null) return null;
+    final now = DateTime.now();
+    final end = nb.start.add(Duration(minutes: nb.rest));
+    if (!now.isBefore(nb.start) && now.isBefore(end)) {
+      return (index: 0, restStart: 0, end: end);
+    }
+    return null;
+  }
+
+  /// عند بدء الراحة: تصبح نهايتها المرساةَ الجديدة فتتدحرج الدورة؛ ويُخزَّن وقت
+  /// الانتهاء (خطّ أمان لعرض القفل).
   Future<void> beginOverlay(int index, int restStart, DateTime end) async {
+    await setAnchor(end); // الراحة التالية = نهاية هذه الراحة + مدّة العمل
     try {
       final sp = await SharedPreferences.getInstance();
       var mins = end.difference(DateTime.now()).inMinutes;
-      if (mins < 1) mins = 1; // حدّ أدنى
-      if (mins > 30) mins = 30; // سقف أمان
+      if (mins < 1) mins = 1;
+      if (mins > 30) mins = 30;
       await sp.setInt('hr_active_end', end.millisecondsSinceEpoch);
       await sp.setInt('hr_active_minutes', mins);
     } catch (_) {}
-    await markDone(index, restStart);
   }
 
-  /// موعد أقرب راحة قادمة (اليوم أو غدًا) — للعرض في الرئيسية.
-  DateTime? nextStart() {
-    if (!_enabled) return null;
-    final now = DateTime.now();
-    DateTime? best;
-    for (final p in _periods) {
-      if (!p.enabled) continue;
-      for (final rs in p.restStarts()) {
-        var t = _todayAt(rs);
-        if (!t.isAfter(now)) t = t.add(const Duration(days: 1));
-        if (best == null || t.isBefore(best)) best = t;
-      }
-    }
-    return best;
-  }
+  /// موعد الراحة القادمة — للعرض في الرئيسية وجدولة المنبّه.
+  DateTime? nextStart() => _nextBreak()?.start;
 
   /// كل أوقات بدء الراحات (لكل الفترات المفعّلة) — لجدولة الإشعارات.
   List<int> allRestStarts() {

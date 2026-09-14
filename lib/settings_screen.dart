@@ -416,7 +416,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
-            // نافذة العمل: من … إلى …
+            // نافذة العمل (ساعات التفعيل): من … إلى …
             Row(
               children: [
                 Expanded(
@@ -438,6 +438,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
+            // زرّ سريع: اجعل التفعيل طوال اليوم (يعمل في أي وقت الآن).
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TextButton.icon(
+                onPressed: () => setState(() {
+                  p.startMinutes = 0;
+                  p.endMinutes = 24 * 60 - 1;
+                }),
+                icon: const Icon(Icons.all_inclusive, size: 16),
+                label: const Text('طوال اليوم'),
+              ),
+            ),
             // مدّة العمل المتواصل — حقل كتابة حرّ (بالدقائق)
             _numberField('مدّة العمل:', p.workMinutes,
                 (v) => setState(() => p.workMinutes = v),
@@ -446,10 +458,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _numberField('مدّة الراحة:', p.restMinutes,
                 (v) => setState(() => p.restMinutes = v),
                 ValueKey('rest_${identityHashCode(p)}')),
-            // ملخّص: عدد الراحات المتولّدة
+            // ملخّص: راحة بعد كل مدّة عمل، ضمن ساعات التفعيل.
             Align(
               alignment: AlignmentDirectional.centerStart,
-              child: Text('عدد الراحات: ${p.restStarts().length}',
+              child: Text(
+                  'راحة ${p.restMinutes} د بعد كل ${p.workMinutes} د عمل، '
+                  '${p.startMinutes == 0 && p.endMinutes >= 24 * 60 - 1 ? "طوال اليوم" : "بين ${_fmtMin(p.startMinutes)} و${_fmtMin(p.endMinutes)}"}',
                   style: TextStyle(fontSize: 12, color: scheme.primary)),
             ),
           ],
