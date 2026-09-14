@@ -415,10 +415,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             : scheme.surfaceContainerHighest,
                         child: Text('${i + 1}'),
                       ),
-                      title: Text(
-                          'من ${_fmtMin(p.startMinutes)} إلى ${_fmtMin(p.endMinutes)}'),
+                      title: Text(p.startMinutes == 0 &&
+                              p.endMinutes >= 24 * 60 - 1
+                          ? 'طوال اليوم'
+                          : 'من ${_fmtMin(p.startMinutes)} إلى ${_fmtMin(p.endMinutes)}'),
                       subtitle: Text(
-                          'عمل ${p.workMinutes} د · راحة ${p.restMinutes} د · ${p.restStarts().length} راحات'),
+                          'راحة ${p.restMinutes} د بعد كل ${p.workMinutes} د عمل'),
                       trailing: Icon(
                         p.enabled
                             ? Icons.check_circle
