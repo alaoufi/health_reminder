@@ -21,6 +21,8 @@ dependencies:
   timezone: ^0.9.4
   # نافذة نظام فوق كل التطبيقات (قفل الحركة فوق أي تطبيق)
   flutter_overlay_window: ^0.5.0
+  # منبّه خلفيّ دقيق: يعرض النافذة في وقت الراحة بالضبط حتى لو التطبيق مغلق
+  android_alarm_manager_plus: ^4.0.4
   # التحديث الذاتيّ عبر GitHub Releases
   http: ^1.2.0
   path_provider: ^2.1.4

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -62,6 +63,8 @@ Future<void> main() async {
     FlutterError.onError = (d) => startupErrors.add('Flutter: ${d.exceptionAsString()}');
 
     await _safe('settings', () => BreakService.instance.load());
+    // مدير المنبّهات الخلفيّة الدقيقة (لعرض القفل في وقت الراحة حتى لو التطبيق مغلق).
+    await _safe('alarm', () => AndroidAlarmManager.initialize());
     // ملاحظة: تهيئة الإشعارات مؤجَّلة إلى ما بعد ظهور الواجهة (في HomeScreen) كي لا
     // تُعطّل الإقلاع أو تُخفي سببه إن فشلت.
     runApp(const HealthReminderApp());

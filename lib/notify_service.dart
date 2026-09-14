@@ -3,6 +3,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
+import 'break_alarm.dart';
 import 'break_service.dart';
 
 /// إشعارات محلية صامتة بملء الشاشة عند حلول كل فترة — تُنبّه حتى إن كان التطبيق
@@ -60,6 +61,11 @@ class NotifyService {
   /// يُعيد جدولة كل الفترات المفعّلة (تلغى القديمة أولًا).
   Future<void> rescheduleAll() async {
     if (!_ready) await init();
+    // المُشغّل الأساسيّ للقفل القسريّ: منبّهات خلفيّة دقيقة تعرض النافذة في وقتها
+    // بالضبط حتى لو كان التطبيق مغلقًا (الإشعار أدناه يبقى كتنبيه مكمّل).
+    try {
+      await BreakAlarm.rescheduleAll();
+    } catch (_) {}
     try {
       await _plugin.cancelAll();
       final svc = BreakService.instance;
