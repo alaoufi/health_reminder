@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import 'break_service.dart';
 import 'notify_service.dart';
@@ -20,6 +21,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late int _idleResetMinutes;
   late List<BreakPeriod> _periods;
   final _codeCtrl = TextEditingController();
+  String _appVersion = '';
 
   @override
   void initState() {
@@ -28,6 +30,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _enabled = svc.enabled;
     _showPhrases = svc.showPhrases;
     _idleResetMinutes = svc.idleResetMinutes;
+    // رقم النسخة (يظهر أسفل الإعدادات).
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) {
+        setState(() =>
+            _appVersion = '${info.version} (${info.buildNumber})');
+      }
+    }).catchError((_) {});
     _periods = svc.periods
         .map((p) => BreakPeriod(
             startMinutes: p.startMinutes,
@@ -312,6 +321,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: const Icon(Icons.save),
             label: const Text('حفظ'),
           ),
+          const SizedBox(height: 20),
+          Center(
+            child: Text(
+              _appVersion.isEmpty
+                  ? 'لا تجلس طويلًا'
+                  : 'لا تجلس طويلًا · الإصدار $_appVersion',
+              style: TextStyle(
+                  fontSize: 12, color: scheme.onSurfaceVariant),
+            ),
+          ),
+          const SizedBox(height: 8),
         ],
       ),
     );
