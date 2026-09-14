@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
+import 'backup_service.dart';
 import 'break_screen.dart';
 import 'break_service.dart';
 import 'notify_service.dart';
@@ -34,6 +35,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _refreshPerm();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // تثبيت جديد؟ حاول استعادة الإعدادات من الملفّ المخفيّ بذاكرة الجهاز.
+      await _restoreIfFresh();
       // تهيئة الإشعارات وجدولتها بعد ظهور الواجهة (لا تُعطّل الإقلاع إن فشلت).
       try {
         await NotifyService.instance.init();
@@ -68,6 +71,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       await _platform.invokeMethod('requestIgnoreBatteryOptimizations');
     } catch (_) {}
     await _refreshPerm();
+  }
+
+  /// عند التثبيت الجديد: إن وُجد ملفّ نسخة احتياطية بذاكرة الجهاز، استعِد منه
+  /// الإعدادات تلقائيًّا (فلا تُفقد بعد الحذف وإعادة التثبيت).
+  Future<void> _restoreIfFresh() async {
+    if (!BreakService.instance.wasFreshInstall) return;
+    try {
+      final raw = await BackupService.read();
+      if (raw != null && raw.trim().isNotEmpty) {
+        final ok = await BreakService.instance.importJson(raw);
+        if (ok && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('استُعيدت إعداداتك المحفوظة على الجهاز ✅')));
+          setState(() {});
+        }
+      }
+    } catch (_) {}
   }
 
   @override
@@ -219,6 +239,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 onChanged: (v) async {
                   await svc.save(enabled: v);
                   await NotifyService.instance.rescheduleAll();
+                  await BackupService.write(svc.exportJson()); // نسخة على الجهاز
                 },
                 title: const Text('تشغيل/إيقاف',
                     style: TextStyle(fontWeight: FontWeight.bold)),

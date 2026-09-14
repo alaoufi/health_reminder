@@ -73,8 +73,11 @@ class BreakService extends ChangeNotifier {
   Set<String> _doneKeys = {};
   bool _showPhrases = true; // true: عبارات تحفيزية، false: شاشة صامتة بعدّاد فقط
   int _idleResetMinutes = 15; // خمول ≥ هذه المدّة (بإطفاء الشاشة) يُصفّر عدّاد العمل
+  bool _wasFresh = false; // true إن لم تكن هناك إعدادات محفوظة عند التحميل (تثبيت جديد)
 
   bool get enabled => _enabled;
+  /// هل هذا تثبيت جديد بلا إعدادات محفوظة؟ (لمحاولة الاستعادة من ملفّ الجهاز)
+  bool get wasFreshInstall => _wasFresh;
   List<BreakPeriod> get periods => List.unmodifiable(_periods);
   String get bypassCode => _bypassCode;
   bool get hasBypassCode => _bypassCode.trim().isNotEmpty;
@@ -90,10 +93,12 @@ class BreakService extends ChangeNotifier {
       _idleResetMinutes = sp.getInt(_kIdleReset) ?? 15;
       final raw = sp.getString(_kPeriods);
       if (raw != null && raw.isNotEmpty) {
+        _wasFresh = false;
         _periods = (jsonDecode(raw) as List)
             .map((e) => BreakPeriod.fromJson((e as Map).cast<String, dynamic>()))
             .toList();
       } else {
+        _wasFresh = true; // لا إعدادات محفوظة ⇒ تثبيت جديد (حاول الاستعادة).
         _periods = _defaults();
       }
       final today = _dayKey();
