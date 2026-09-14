@@ -168,7 +168,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Scaffold(
+    // حفظ تلقائيّ عند الخروج (زرّ الرجوع/إيماءة النظام) كي لا يضيع أي تعديل ولا
+    // يبقى موعد الراحة قديمًا لو نسي المستخدم زرّ «حفظ».
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        await _persist();
+        if (context.mounted) Navigator.of(context).pop();
+      },
+      child: Scaffold(
       appBar: AppBar(title: const Text('الإعدادات')),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -322,6 +331,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           const SizedBox(height: 8),
         ],
+      ),
       ),
     );
   }
