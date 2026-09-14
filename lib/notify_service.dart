@@ -58,39 +58,19 @@ class NotifyService {
     return t;
   }
 
-  /// يُعيد جدولة كل الفترات المفعّلة (تلغى القديمة أولًا).
+  /// المُشغّل الموثوق الآن هو منبّه `setAlarmClock` الأصليّ (يُجدوَل من الرئيسية
+  /// عبر القناة الأصليّة). هنا **نُلغي** المسارات القديمة (منبّهات
+  /// android_alarm_manager وإشعارات الجدولة) لتفادي التعارض وازدواج الإشعارات مع
+  /// المسار الجديد.
   Future<void> rescheduleAll() async {
-    if (!_ready) await init();
-    // المُشغّل الأساسيّ للقفل القسريّ: منبّهات خلفيّة دقيقة تعرض النافذة في وقتها
-    // بالضبط حتى لو كان التطبيق مغلقًا (الإشعار أدناه يبقى كتنبيه مكمّل).
     try {
-      await BreakAlarm.rescheduleAll();
+      await BreakAlarm.cancelAll();
     } catch (_) {}
     try {
+      if (!_ready) await init();
       await _plugin.cancelAll();
-      final svc = BreakService.instance;
-      if (!svc.enabled) return;
-      // إشعار يوميّ لكل بداية راحة داخل كل نافذة عمل (مع سقف أمان).
-      var id = 100;
-      for (final p in svc.periods) {
-        if (!p.enabled) continue;
-        for (final rs in p.restStarts()) {
-          if (id > 180) break;
-          await _plugin.zonedSchedule(
-            id++,
-            'حان وقت الحركة 🧘',
-            'قِف وتحرّك بهدوء دقائق — صحّتك أهمّ. افتح التطبيق للبدء.',
-            _nextInstance(rs),
-            const NotificationDetails(android: _channel),
-            androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-            uiLocalNotificationDateInterpretation:
-                UILocalNotificationDateInterpretation.absoluteTime,
-            matchDateTimeComponents: DateTimeComponents.time, // يوميًّا
-          );
-        }
-      }
     } catch (e) {
-      debugPrint('rescheduleAll failed: $e');
+      debugPrint('cancel old schedules failed: $e');
     }
   }
 

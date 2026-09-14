@@ -1,13 +1,18 @@
 package com.alaoufi.health_reminder
 
+import android.app.AlarmManager
+import android.app.KeyguardManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.WindowManager
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -18,6 +23,39 @@ import java.io.File
 /// النظام على ملفّ APK عبر FileProvider.
 class MainActivity : FlutterActivity() {
     private val channel = "com.alaoufi.health_reminder/installer"
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        applyBreakWindowFlags()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyBreakWindowFlags()
+    }
+
+    /// عند الفتح من منبّه الراحة: أيقِظ الشاشة واعرِض فوق قفل الشاشة (قفل صارم).
+    private fun applyBreakWindowFlags() {
+        if (intent?.getBooleanExtra("show_break", false) != true) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+            try {
+                val km = getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager
+                km.requestDismissKeyguard(this, null)
+            } catch (_: Exception) {
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD or
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            )
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -167,6 +205,24 @@ class MainActivity : FlutterActivity() {
                         }
                         result.success(true)
                     }
+                    "scheduleExactBreak" -> {
+                        // يجدول منبّه راحة دقيقًا عبر setAlarmClock (يحترمه MIUI
+                        // حتى في توفير الطاقة) — أوثق طريقة للظهور والتطبيق مغلق.
+                        val epoch = call.argument<Number>("epoch")?.toLong()
+                        if (epoch != null) scheduleExactBreak(epoch)
+                        result.success(true)
+                    }
+                    "cancelExactBreak" -> {
+                        cancelExactBreak()
+                        result.success(true)
+                    }
+                    "clearBreakNotification" -> {
+                        try {
+                            (getSystemService(Context.NOTIFICATION_SERVICE)
+                                as android.app.NotificationManager).cancel(9911)
+                        } catch (_: Exception) {}
+                        result.success(true)
+                    }
                     "moveToBack" -> {
                         // أرسِل المهمّة إلى الخلفية ليعود المستخدم إلى التطبيق
                         // السابق بعد انتهاء الاستراحة (بدل البقاء على هذا التطبيق).
@@ -189,6 +245,49 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun pendingFlags(): Int {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+    }
+
+    private fun breakOperation(): PendingIntent {
+        val i = Intent(this, BreakAlarmReceiver::class.java)
+            .setAction("com.alaoufi.health_reminder.BREAK_NOW")
+        return PendingIntent.getBroadcast(this, 7100, i, pendingFlags())
+    }
+
+    /// يجدول منبّه راحة دقيقًا عبر setAlarmClock (الأعلى أولويّةً، معفى من Doze
+    /// وتحترمه أجهزة الشركات المصنّعة) — يُطلق مُستقبِل الراحة في الوقت بالضبط.
+    private fun scheduleExactBreak(epoch: Long) {
+        val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val op = breakOperation()
+        try {
+            val show = PendingIntent.getActivity(
+                this, 7101,
+                Intent(this, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                pendingFlags()
+            )
+            am.setAlarmClock(AlarmManager.AlarmClockInfo(epoch, show), op)
+        } catch (e: Exception) {
+            try {
+                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, epoch, op)
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun cancelExactBreak() {
+        try {
+            (getSystemService(Context.ALARM_SERVICE) as AlarmManager)
+                .cancel(breakOperation())
+        } catch (_: Exception) {
+        }
     }
 
     /// يحاول فتح شاشة (Intent) ويعيد true عند النجاح.
