@@ -22,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _breakShowing = false;
   bool _starting = false;
   bool _overlayPerm = false;
+  bool _battOk = true; // هل سُمح بتجاوز توفير البطارية؟ (لعمل المنبّه والجهاز مغلق)
 
   /// قناة أصليّة لإرسال التطبيق إلى الخلفية (العودة للتطبيق السابق).
   static const _platform =
@@ -48,11 +49,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final p = await FlutterOverlayWindow.isPermissionGranted();
       if (mounted) setState(() => _overlayPerm = p);
     } catch (_) {}
+    try {
+      final b =
+          await _platform.invokeMethod<bool>('isIgnoringBatteryOptimizations');
+      if (mounted) setState(() => _battOk = b ?? true);
+    } catch (_) {}
   }
 
   Future<void> _requestOverlayPerm() async {
     try {
       await FlutterOverlayWindow.requestPermission();
+    } catch (_) {}
+    await _refreshPerm();
+  }
+
+  Future<void> _requestBattery() async {
+    try {
+      await _platform.invokeMethod('requestIgnoreBatteryOptimizations');
     } catch (_) {}
     await _refreshPerm();
   }
@@ -231,8 +244,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ),
                         const SizedBox(height: 6),
                         const Text(
-                          'لِيُغطّي التنبيه شاشتك فوق أي تطبيق (لا داخل هذا '
-                          'التطبيق فقط)، امنح صلاحية «العرض فوق التطبيقات».',
+                          'ليظهر التنبيه تلقائيًّا فوق أي تطبيق (والجهاز مغلق) '
+                          'ويُغطّي الشاشة كاملة — لا داخل هذا التطبيق فقط — امنح '
+                          'صلاحية «العرض فوق التطبيقات». بدونها لن تظهر الشاشة '
+                          'إلا عند فتح التطبيق يدويًّا.',
                           style: TextStyle(fontSize: 13, height: 1.5),
                         ),
                         const SizedBox(height: 8),
@@ -240,6 +255,43 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           onPressed: _requestOverlayPerm,
                           icon: const Icon(Icons.open_in_new, size: 18),
                           label: const Text('منح الصلاحية'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              // بطاقة تجاوز توفير البطارية (تظهر حتى يُسمح) — شرط لعمل المنبّه
+              // الدقيق في وقته والجهاز مغلق دون أن يوقفه النظام.
+              if (!_battOk)
+                Card(
+                  color: scheme.errorContainer.withValues(alpha: 0.5),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.battery_alert, color: scheme.error),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text('تجاوز توفير البطارية',
+                                  style: TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'كي يظهر التنبيه في وقته بالضبط والجهاز مغلق، اسمح '
+                          'للتطبيق بتجاوز توفير البطارية — وإلّا قد يوقف النظام '
+                          'المنبّه فلا تظهر الشاشة تلقائيًّا.',
+                          style: TextStyle(fontSize: 13, height: 1.5),
+                        ),
+                        const SizedBox(height: 8),
+                        FilledButton.icon(
+                          onPressed: _requestBattery,
+                          icon: const Icon(Icons.open_in_new, size: 18),
+                          label: const Text('السماح'),
                         ),
                       ],
                     ),

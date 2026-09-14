@@ -57,32 +57,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _fmtMin(int m) =>
       '${((m ~/ 60) % 24).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}';
 
-  /// صفّ اختيار بقيم محدّدة (أزرار) بدل شريط التمرير.
-  Widget _choiceRow(
-      String label, int value, List<int> options, ValueChanged<int> onPick) {
+  /// حقل كتابة حرّ لعدد الدقائق — يكتب المستخدم الرقم الذي يريده بلا خيارات مفروضة.
+  Widget _numberField(
+      String label, int value, ValueChanged<int> onPick, Key fieldKey) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: SizedBox(
-                width: 96,
-                child: Text(label, style: const TextStyle(fontSize: 13))),
-          ),
+          SizedBox(
+              width: 96,
+              child: Text(label, style: const TextStyle(fontSize: 13))),
+          const SizedBox(width: 8),
           Expanded(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                for (final o in options)
-                  ChoiceChip(
-                    label: Text('$o د'),
-                    selected: value == o,
-                    onSelected: (_) => onPick(o),
-                  ),
-              ],
+            child: TextFormField(
+              key: fieldKey,
+              initialValue: value.toString(),
+              keyboardType: TextInputType.number,
+              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+              decoration: const InputDecoration(
+                isDense: true,
+                suffixText: 'دقيقة',
+                border: OutlineInputBorder(),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              onChanged: (s) {
+                final n = int.tryParse(s.trim());
+                if (n != null && n > 0) onPick(n);
+              },
             ),
           ),
         ],
@@ -243,8 +245,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             '$_idleResetMinutes دقيقة، تُحتسب راحةً ويعود عدّاد العمل للصفر.',
             style: const TextStyle(fontSize: 13, height: 1.5),
           ),
-          _choiceRow('مدّة الخمول:', _idleResetMinutes, const [10, 15, 20, 30],
-              (v) => setState(() => _idleResetMinutes = v)),
+          _numberField('مدّة الخمول:', _idleResetMinutes,
+              (v) => setState(() => _idleResetMinutes = v),
+              const ValueKey('idle')),
           const Divider(),
           const SizedBox(height: 4),
           Text('الفترات (حتى ٣)',
@@ -386,12 +389,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ],
             ),
-            // مدّة العمل المتواصل — خيارات محدّدة
-            _choiceRow('مدّة العمل:', p.workMinutes, const [30, 60, 90, 120],
-                (v) => setState(() => p.workMinutes = v)),
-            // مدّة الراحة/الحركة — خيارات محدّدة
-            _choiceRow('مدّة الراحة:', p.restMinutes, const [5, 10, 15, 20],
-                (v) => setState(() => p.restMinutes = v)),
+            // مدّة العمل المتواصل — حقل كتابة حرّ (بالدقائق)
+            _numberField('مدّة العمل:', p.workMinutes,
+                (v) => setState(() => p.workMinutes = v),
+                ValueKey('work_${identityHashCode(p)}')),
+            // مدّة الراحة/الحركة — حقل كتابة حرّ (بالدقائق)
+            _numberField('مدّة الراحة:', p.restMinutes,
+                (v) => setState(() => p.restMinutes = v),
+                ValueKey('rest_${identityHashCode(p)}')),
             // ملخّص: عدد الراحات المتولّدة
             Align(
               alignment: AlignmentDirectional.centerStart,

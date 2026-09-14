@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -55,6 +56,10 @@ class _OverlayBreakState extends State<OverlayBreak> {
   @override
   void initState() {
     super.initState();
+    // وضع غامر: يُخفي شريطي الحالة والتنقّل ليُغطّي القفل الشاشة كاملة بلا منفذ خروج.
+    try {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } catch (_) {}
     _load();
   }
 
@@ -115,6 +120,10 @@ class _OverlayBreakState extends State<OverlayBreak> {
     _tick?.cancel();
     _safety?.cancel();
     _holdTimer?.cancel();
+    // استعادة شريطي الحالة والتنقّل قبل إغلاق النافذة.
+    try {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    } catch (_) {}
     try {
       await FlutterOverlayWindow.closeOverlay();
     } catch (_) {}
