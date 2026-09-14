@@ -65,18 +65,21 @@ class BreakService extends ChangeNotifier {
   static const _kCode = 'hr_bypass_code';
   static const _kDone = 'hr_done_keys';
   static const _kShowPhrases = 'hr_show_phrases'; // عرض العبارات أم شاشة صامتة
+  static const _kIdleReset = 'hr_idle_reset'; // عتبة الخمول (دقائق) لاعتباره راحة
 
   bool _enabled = true;
   List<BreakPeriod> _periods = [];
   String _bypassCode = '';
   Set<String> _doneKeys = {};
   bool _showPhrases = true; // true: عبارات تحفيزية، false: شاشة صامتة بعدّاد فقط
+  int _idleResetMinutes = 15; // خمول ≥ هذه المدّة (بإطفاء الشاشة) يُصفّر عدّاد العمل
 
   bool get enabled => _enabled;
   List<BreakPeriod> get periods => List.unmodifiable(_periods);
   String get bypassCode => _bypassCode;
   bool get hasBypassCode => _bypassCode.trim().isNotEmpty;
   bool get showPhrases => _showPhrases;
+  int get idleResetMinutes => _idleResetMinutes;
 
   Future<void> load() async {
     try {
@@ -84,6 +87,7 @@ class BreakService extends ChangeNotifier {
       _enabled = sp.getBool(_kEnabled) ?? true;
       _bypassCode = sp.getString(_kCode) ?? '';
       _showPhrases = sp.getBool(_kShowPhrases) ?? true;
+      _idleResetMinutes = sp.getInt(_kIdleReset) ?? 15;
       final raw = sp.getString(_kPeriods);
       if (raw != null && raw.isNotEmpty) {
         _periods = (jsonDecode(raw) as List)
@@ -115,17 +119,22 @@ class BreakService extends ChangeNotifier {
     List<BreakPeriod>? periods,
     String? bypassCode,
     bool? showPhrases,
+    int? idleResetMinutes,
   }) async {
     if (enabled != null) _enabled = enabled;
     if (periods != null) _periods = periods.take(3).toList();
     if (bypassCode != null) _bypassCode = bypassCode.trim();
     if (showPhrases != null) _showPhrases = showPhrases;
+    if (idleResetMinutes != null) {
+      _idleResetMinutes = idleResetMinutes.clamp(1, 120);
+    }
     final sp = await SharedPreferences.getInstance();
     await sp.setBool(_kEnabled, _enabled);
     await sp.setString(
         _kPeriods, jsonEncode(_periods.map((p) => p.toJson()).toList()));
     await sp.setString(_kCode, _bypassCode);
     await sp.setBool(_kShowPhrases, _showPhrases);
+    await sp.setInt(_kIdleReset, _idleResetMinutes);
     notifyListeners();
   }
 
@@ -219,6 +228,7 @@ class BreakService extends ChangeNotifier {
         'v': 1,
         'enabled': _enabled,
         'showPhrases': _showPhrases,
+        'idleResetMinutes': _idleResetMinutes,
         'bypassCode': _bypassCode,
         'periods': _periods.map((p) => p.toJson()).toList(),
       });
@@ -233,6 +243,7 @@ class BreakService extends ChangeNotifier {
       await save(
         enabled: j['enabled'] as bool?,
         showPhrases: j['showPhrases'] as bool?,
+        idleResetMinutes: (j['idleResetMinutes'] as num?)?.toInt(),
         bypassCode: j['bypassCode'] as String?,
         periods: periods,
       );

@@ -17,6 +17,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late bool _enabled;
   late bool _showPhrases;
+  late int _idleResetMinutes;
   late List<BreakPeriod> _periods;
   final _codeCtrl = TextEditingController();
 
@@ -26,6 +27,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final svc = BreakService.instance;
     _enabled = svc.enabled;
     _showPhrases = svc.showPhrases;
+    _idleResetMinutes = svc.idleResetMinutes;
     _periods = svc.periods
         .map((p) => BreakPeriod(
             startMinutes: p.startMinutes,
@@ -59,7 +61,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         enabled: _enabled,
         periods: _periods,
         bypassCode: _codeCtrl.text,
-        showPhrases: _showPhrases);
+        showPhrases: _showPhrases,
+        idleResetMinutes: _idleResetMinutes);
     await NotifyService.instance.rescheduleAll();
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -71,6 +74,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         'v': 1,
         'enabled': _enabled,
         'showPhrases': _showPhrases,
+        'idleResetMinutes': _idleResetMinutes,
         'bypassCode': _codeCtrl.text.trim(),
         'periods': _periods.map((p) => p.toJson()).toList(),
       });
@@ -139,6 +143,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {
         _enabled = svc.enabled;
         _showPhrases = svc.showPhrases;
+        _idleResetMinutes = svc.idleResetMinutes;
         _codeCtrl.text = svc.bypassCode;
         _periods = svc.periods
             .map((p) => BreakPeriod(
@@ -184,6 +189,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ? 'تظهر عبارات صحّية متغيّرة على شاشة الاستراحة.'
                 : 'شاشة صامتة بعدّاد فقط بلا عبارات.'),
             contentPadding: EdgeInsets.zero,
+          ),
+          const Divider(),
+          const SizedBox(height: 4),
+          Text('ربط العمل بنشاط الجهاز',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, color: scheme.primary)),
+          const SizedBox(height: 4),
+          Text(
+            'إذا أُطفئت الشاشة (ابتعدتَ عن الجهاز) مدّةً لا تقلّ عن '
+            '$_idleResetMinutes دقيقة، تُحتسب راحةً ويعود عدّاد العمل للصفر.',
+            style: const TextStyle(fontSize: 13, height: 1.5),
+          ),
+          Row(
+            children: [
+              const SizedBox(
+                  width: 110,
+                  child:
+                      Text('مدّة الخمول:', style: TextStyle(fontSize: 13))),
+              Expanded(
+                child: Slider(
+                  value: _idleResetMinutes.toDouble().clamp(5, 60),
+                  min: 5,
+                  max: 60,
+                  divisions: 11,
+                  label: '$_idleResetMinutes د',
+                  onChanged: (v) =>
+                      setState(() => _idleResetMinutes = v.round()),
+                ),
+              ),
+              SizedBox(
+                  width: 54,
+                  child: Text('$_idleResetMinutes د',
+                      style: const TextStyle(fontWeight: FontWeight.w600))),
+            ],
           ),
           const Divider(),
           const SizedBox(height: 4),
