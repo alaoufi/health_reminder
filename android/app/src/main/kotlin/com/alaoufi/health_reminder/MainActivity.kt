@@ -1,8 +1,10 @@
 package com.alaoufi.health_reminder
 
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import io.flutter.embedding.android.FlutterActivity
@@ -34,6 +36,38 @@ class MainActivity : FlutterActivity() {
                             )
                             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             startActivity(intent)
+                        }
+                        result.success(true)
+                    }
+                    "isIgnoringBatteryOptimizations" -> {
+                        // هل سُمح للتطبيق بتجاوز توفير البطارية؟ (شرط لعمل المنبّهات
+                        // الدقيقة والجهاز مغلق دون أن يوقفها النظام.)
+                        val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                            pm.isIgnoringBatteryOptimizations(packageName)
+                        } else true
+                        result.success(ok)
+                    }
+                    "requestIgnoreBatteryOptimizations" -> {
+                        // يفتح طلب النظام لتجاوز توفير البطارية لهذا التطبيق.
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                            try {
+                                val intent = Intent(
+                                    Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                    Uri.parse("package:$packageName")
+                                )
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                startActivity(intent)
+                            } catch (e: Exception) {
+                                // بديل: افتح شاشة إعدادات تجاوز التوفير العامّة.
+                                try {
+                                    val intent = Intent(
+                                        Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+                                    )
+                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    startActivity(intent)
+                                } catch (_: Exception) {}
+                            }
                         }
                         result.success(true)
                     }

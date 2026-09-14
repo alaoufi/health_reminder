@@ -58,6 +58,11 @@ class _BreakScreenState extends State<BreakScreen> {
   @override
   void initState() {
     super.initState();
+    // وضع غامر: يُخفي شريطي الحالة والتنقّل السفليّ فيغطّي التنبيه الشاشة كاملة
+    // ولا يبقى «أسفل» ظاهرًا يمكّن من الخروج. (يُستعاد الوضع الطبيعيّ عند الإغلاق.)
+    try {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } catch (_) {}
     _computeRemaining();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
       _computeRemaining();
@@ -160,6 +165,10 @@ class _BreakScreenState extends State<BreakScreen> {
   void dispose() {
     _tick?.cancel();
     _holdTimer?.cancel();
+    // استعادة شريطي الحالة والتنقّل بعد انتهاء الاستراحة.
+    try {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    } catch (_) {}
     super.dispose();
   }
 
