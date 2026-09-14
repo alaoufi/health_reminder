@@ -55,17 +55,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) setState(() => _deviceBackupOn = ok);
   }
 
-  /// يطلب صلاحية الوصول لذاكرة الجهاز، ثم يكتب النسخة الحاليّة فور منحها.
+  /// يطلب صلاحية الوصول لذاكرة الجهاز، ثم — إن كان تثبيتًا جديدًا ووُجد ملفّ محفوظ
+  /// — يستعيد الإعدادات فورًا (يعالج «حذفت وثبّت ولم ترجع»)، وإلّا يكتب النسخة الحاليّة.
   Future<void> _enableDeviceBackup() async {
     await BackupService.requestAccess();
     await _refreshBackupAccess();
-    if (_deviceBackupOn) {
-      await _persist();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('فُعّل الحفظ التلقائيّ على الجهاز ✅')));
+    if (!_deviceBackupOn) return;
+    var msg = 'فُعّل الحفظ التلقائيّ على الجهاز ✅';
+    if (BreakService.instance.wasFreshInstall) {
+      final restored = await _restoreFromDevice(silent: true);
+      if (restored) {
+        msg = 'استُعيدت إعداداتك المحفوظة على الجهاز ✅';
+      } else {
+        await _persist();
       }
+    } else {
+      await _persist();
     }
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
+  }
+
+  /// يقرأ ملفّ النسخة من الجهاز ويستورده إلى الإعدادات. يعيد true عند النجاح.
+  Future<bool> _restoreFromDevice({bool silent = false}) async {
+    final raw = await BackupService.read();
+    if (raw == null || raw.trim().isEmpty) {
+      if (!silent && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('لا توجد نسخة محفوظة على الجهاز')));
+      }
+      return false;
+    }
+    final ok = await BreakService.instance.importJson(raw);
+    if (ok && mounted) {
+      final svc = BreakService.instance;
+      setState(() {
+        _enabled = svc.enabled;
+        _showPhrases = svc.showPhrases;
+        _idleResetMinutes = svc.idleResetMinutes;
+        _codeCtrl.text = svc.bypassCode;
+        _periods = svc.periods
+            .map((p) => BreakPeriod(
+                startMinutes: p.startMinutes,
+                endMinutes: p.endMinutes,
+                workMinutes: p.workMinutes,
+                restMinutes: p.restMinutes,
+                enabled: p.enabled))
+            .toList();
+      });
+      await NotifyService.instance.rescheduleAll();
+      if (!silent && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('استُعيدت إعداداتك ✅')));
+      }
+    } else if (!ok && !silent && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('تعذّرت الاستعادة — الملفّ غير صالح')));
+    }
+    return ok;
   }
 
   @override
@@ -294,14 +342,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             'يتطلّب السماح بالوصول إلى الملفّات.',
                     style: const TextStyle(fontSize: 13, height: 1.5),
                   ),
-                  if (!_deviceBackupOn) ...[
-                    const SizedBox(height: 8),
+                  const SizedBox(height: 8),
+                  if (!_deviceBackupOn)
                     FilledButton.icon(
                       onPressed: _enableDeviceBackup,
                       icon: const Icon(Icons.open_in_new, size: 18),
                       label: const Text('تفعيل الحفظ على الجهاز'),
+                    )
+                  else
+                    OutlinedButton.icon(
+                      onPressed: () => _restoreFromDevice(),
+                      icon: const Icon(Icons.restore, size: 18),
+                      label: const Text('استعادة إعداداتي من الجهاز'),
                     ),
-                  ],
                 ],
               ),
             ),
