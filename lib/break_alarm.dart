@@ -14,8 +14,36 @@ class BreakAlarm {
   BreakAlarm._();
 
   static const int _base = 700000; // نطاق معرّفات ثابت لمنبّهات الراحة.
+  static const int _closeId = 690001; // معرّف منبّه إغلاق النافذة (طبقة أمان).
   static int _idFor(int periodIndex, int restStart) =>
       _base + periodIndex * 2000 + restStart; // restStart < 1440 < 2000
+
+  /// يجدول منبّهًا لمرّة واحدة عند [end] يُغلق النافذة العائمة من عزلة مستقلّة —
+  /// طبقة أمان: تُغلق الشاشة حتى لو تجمّدت عزلة النافذة نفسها (فلا حاجة لإعادة
+  /// تشغيل الجهاز إطلاقًا). يُلغى القديم أولًا.
+  static Future<void> scheduleClose(DateTime end) async {
+    try {
+      await AndroidAlarmManager.cancel(_closeId);
+    } catch (_) {}
+    // سقف أمان: لا يتجاوز الإغلاق ٣١ دقيقة مهما فسدت البيانات.
+    var when = end;
+    final cap = DateTime.now().add(const Duration(minutes: 31));
+    if (when.isAfter(cap)) when = cap;
+    if (!when.isAfter(DateTime.now())) {
+      when = DateTime.now().add(const Duration(seconds: 2));
+    }
+    try {
+      await AndroidAlarmManager.oneShotAt(
+        when,
+        _closeId,
+        breakCloseFire,
+        exact: true,
+        wakeup: true,
+        allowWhileIdle: true,
+        rescheduleOnReboot: false,
+      );
+    } catch (_) {}
+  }
 
   /// يجدول منبّهًا يوميًّا دقيقًا لكل بداية راحة مفعّلة (يلغي القديمة أولًا).
   static Future<void> rescheduleAll() async {
@@ -114,6 +142,26 @@ Future<void> breakAlarmFire() async {
         overlayTitle: 'لا تجلس طويلًا',
         enableDrag: false,
       );
+      // طبقة أمان: جدولة إغلاق مستقلّ عند نهاية الراحة (لا اعتماد على عزلة النافذة).
+      await BreakAlarm.scheduleClose(b.end);
     }
   } catch (_) {/* لا شيء — لا نُسقط التطبيق من عزلة الخلفية */}
+}
+
+/// يُنفَّذ في عزلة مستقلّة عند نهاية الراحة — يُغلق النافذة العائمة ويُنظّف
+/// علامات النشاط. طبقة الأمان التي تمنع بقاء الشاشة عالقةً بلا إغلاق.
+@pragma('vm:entry-point')
+Future<void> breakCloseFire() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
+  try {
+    if (await FlutterOverlayWindow.isActive()) {
+      await FlutterOverlayWindow.closeOverlay();
+    }
+  } catch (_) {}
+  try {
+    final sp = await SharedPreferences.getInstance();
+    await sp.remove('hr_active_end');
+    await sp.remove('hr_active_minutes');
+  } catch (_) {}
 }
