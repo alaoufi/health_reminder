@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'break_service.dart';
 import 'notify_service.dart';
@@ -64,6 +67,99 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Navigator.pop(context);
   }
 
+  String _currentJson() => jsonEncode({
+        'v': 1,
+        'enabled': _enabled,
+        'showPhrases': _showPhrases,
+        'bypassCode': _codeCtrl.text.trim(),
+        'periods': _periods.map((p) => p.toJson()).toList(),
+      });
+
+  Future<void> _exportBackup() async {
+    final data = _currentJson();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('نسخة احتياطية للإعدادات'),
+        content: SingleChildScrollView(
+          child: SelectableText(data,
+              style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('إغلاق')),
+          FilledButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: data));
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content:
+                        Text('نُسخت النسخة الاحتياطية — احفظها في ملاحظاتك')));
+              }
+            },
+            icon: const Icon(Icons.copy, size: 18),
+            label: const Text('نسخ'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _importBackup() async {
+    final ctrl = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('استيراد نسخة احتياطية'),
+        content: TextField(
+          controller: ctrl,
+          maxLines: 6,
+          decoration: const InputDecoration(
+            hintText: 'الصق نصّ النسخة الاحتياطية هنا',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('إلغاء')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('استيراد')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final done = await BreakService.instance.importJson(ctrl.text);
+    if (!mounted) return;
+    if (done) {
+      final svc = BreakService.instance;
+      setState(() {
+        _enabled = svc.enabled;
+        _showPhrases = svc.showPhrases;
+        _codeCtrl.text = svc.bypassCode;
+        _periods = svc.periods
+            .map((p) => BreakPeriod(
+                startMinutes: p.startMinutes,
+                endMinutes: p.endMinutes,
+                workMinutes: p.workMinutes,
+                restMinutes: p.restMinutes,
+                enabled: p.enabled))
+            .toList();
+      });
+      await NotifyService.instance.rescheduleAll();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('تمّ استيراد الإعدادات ✅')));
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('تعذّر الاستيراد — تأكّد من صحّة النصّ')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -127,6 +223,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
               border: OutlineInputBorder(),
               prefixIcon: Icon(Icons.password),
             ),
+          ),
+          const Divider(),
+          const SizedBox(height: 8),
+          Text('نسخة احتياطية للإعدادات',
+              style: TextStyle(
+                  fontWeight: FontWeight.bold, color: scheme.primary)),
+          const SizedBox(height: 4),
+          const Text(
+            'صدّر إعداداتك واحفظها في ملاحظاتك؛ ولاستعادتها بعد إعادة التثبيت '
+            'الصقها في «استيراد» — فلا تفقد شيئًا.',
+            style: TextStyle(fontSize: 13, height: 1.5),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _exportBackup,
+                  icon: const Icon(Icons.ios_share, size: 18),
+                  label: const Text('تصدير'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _importBackup,
+                  icon: const Icon(Icons.download, size: 18),
+                  label: const Text('استيراد'),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
           FilledButton.icon(

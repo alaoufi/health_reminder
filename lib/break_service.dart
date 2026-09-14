@@ -213,4 +213,32 @@ class BreakService extends ChangeNotifier {
 
   bool checkCode(String input) =>
       hasBypassCode && input.trim() == _bypassCode.trim();
+
+  /// نسخة احتياطية: يصدّر كل الإعدادات كنصّ JSON (للنسخ ثم اللصق لاحقًا).
+  String exportJson() => jsonEncode({
+        'v': 1,
+        'enabled': _enabled,
+        'showPhrases': _showPhrases,
+        'bypassCode': _bypassCode,
+        'periods': _periods.map((p) => p.toJson()).toList(),
+      });
+
+  /// استيراد نسخة احتياطية من نصّ JSON. يعيد true عند النجاح.
+  Future<bool> importJson(String raw) async {
+    try {
+      final j = (jsonDecode(raw.trim()) as Map).cast<String, dynamic>();
+      final periods = (j['periods'] as List?)
+          ?.map((e) => BreakPeriod.fromJson((e as Map).cast<String, dynamic>()))
+          .toList();
+      await save(
+        enabled: j['enabled'] as bool?,
+        showPhrases: j['showPhrases'] as bool?,
+        bypassCode: j['bypassCode'] as String?,
+        periods: periods,
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
 }
