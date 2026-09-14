@@ -142,6 +142,31 @@ class MainActivity : FlutterActivity() {
                         }
                         result.success(true)
                     }
+                    "openAutostartSettings" -> {
+                        // يفتح صفحة «التشغيل التلقائيّ» في شاومي/ريدمي (MIUI) إن
+                        // وُجدت، وإلّا صفحة تفاصيل التطبيق — لتفعيل الظهور من
+                        // الخلفية وعدم إيقاف التطبيق.
+                        val opened = tryOpen(
+                            Intent().setClassName(
+                                "com.miui.securitycenter",
+                                "com.miui.permcenter.autostart.AutoStartManagementActivity"
+                            )
+                        ) || tryOpen(
+                            Intent().setClassName(
+                                "com.miui.securitycenter",
+                                "com.miui.appmanager.ApplicationsDetailsActivity"
+                            ).putExtra("package_name", packageName)
+                        )
+                        if (!opened) {
+                            tryOpen(
+                                Intent(
+                                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                    Uri.parse("package:$packageName")
+                                )
+                            )
+                        }
+                        result.success(true)
+                    }
                     "moveToBack" -> {
                         // أرسِل المهمّة إلى الخلفية ليعود المستخدم إلى التطبيق
                         // السابق بعد انتهاء الاستراحة (بدل البقاء على هذا التطبيق).
@@ -164,6 +189,17 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /// يحاول فتح شاشة (Intent) ويعيد true عند النجاح.
+    private fun tryOpen(intent: Intent): Boolean {
+        return try {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            startActivity(intent)
+            true
+        } catch (e: Exception) {
+            false
+        }
     }
 
     /// ملفّ النسخة الاحتياطية المخفيّ في ذاكرة الجهاز العامّة (يبقى بعد حذف التطبيق).

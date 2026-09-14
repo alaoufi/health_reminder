@@ -77,6 +77,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await _refreshPerm();
   }
 
+  Future<void> _openAutostart() async {
+    try {
+      await _platform.invokeMethod('openAutostartSettings');
+    } catch (_) {}
+  }
+
   /// عند التثبيت الجديد: إن وُجد ملفّ نسخة احتياطية بذاكرة الجهاز، استعِد منه
   /// الإعدادات تلقائيًّا (فلا تُفقد بعد الحذف وإعادة التثبيت).
   Future<void> _restoreIfFresh() async {
@@ -343,6 +349,45 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
+              // دليل التشغيل الموثوق على أجهزة شاومي/ريدمي (MIUI) — سببٌ رئيسٌ
+              // لعدم ظهور التنبيه تلقائيًّا والتطبيق مغلق.
+              Card(
+                color: scheme.tertiaryContainer.withValues(alpha: 0.4),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.verified_user, color: scheme.tertiary),
+                          const SizedBox(width: 8),
+                          const Expanded(
+                            child: Text('ليعمل تلقائيًّا والتطبيق مغلق (مهمّ)',
+                                style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'في أجهزة شاومي/ريدمي وغيرها، يوقف النظام التطبيقات في '
+                        'الخلفية فلا تظهر الشاشة تلقائيًّا. فعّل للتطبيق:\n'
+                        '• «التشغيل التلقائيّ» (Autostart).\n'
+                        '• «اعرض النوافذ المنبثقة أثناء التشغيل في الخلفية».\n'
+                        '• «بلا قيود» في توفير البطارية.\n'
+                        'ثمّ اقفل التطبيق في قائمة المهامّ الأخيرة (أيقونة القفل).',
+                        style: TextStyle(fontSize: 13, height: 1.6),
+                      ),
+                      const SizedBox(height: 8),
+                      FilledButton.icon(
+                        onPressed: _openAutostart,
+                        icon: const Icon(Icons.open_in_new, size: 18),
+                        label: const Text('افتح إعدادات التشغيل التلقائيّ'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
               const Divider(),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 8),

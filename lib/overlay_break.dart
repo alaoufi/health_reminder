@@ -144,19 +144,13 @@ class _OverlayBreakState extends State<OverlayBreak> {
     _tick?.cancel();
     _safety?.cancel();
     _holdTimer?.cancel();
-    // استعادة شريطي الحالة والتنقّل قبل إغلاق النافذة (بمهلة لئلّا تتعلّق).
-    try {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge)
-          .timeout(const Duration(seconds: 1));
-    } catch (_) {}
-    // إغلاق النافذة — الأهمّ. بمهلة، ونعيد المحاولة مرّة إن تعثّرت أوّلًا.
-    try {
-      await FlutterOverlayWindow.closeOverlay()
-          .timeout(const Duration(seconds: 2));
-    } catch (_) {
+    // إغلاق النافذة **أوّلًا** — الأهمّ — بمهلة وإعادة محاولة، قبل أي شيء آخر
+    // كي لا يؤخّره أو يمنعه أيّ نداء آخر قد يتعثّر في عزلة النافذة.
+    for (var i = 0; i < 3; i++) {
       try {
         await FlutterOverlayWindow.closeOverlay()
             .timeout(const Duration(seconds: 2));
+        break;
       } catch (_) {}
     }
     // نظّف علامة النشاط حتى لا تُقرأ نهاية قديمة في مرّة لاحقة (بمهلة).
@@ -165,6 +159,11 @@ class _OverlayBreakState extends State<OverlayBreak> {
           .timeout(const Duration(seconds: 2));
       await sp.remove('hr_active_end');
       await sp.remove('hr_active_minutes');
+    } catch (_) {}
+    // استعادة شريطي الحالة والتنقّل (غير حرِج — بعد الإغلاق).
+    try {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge)
+          .timeout(const Duration(seconds: 1));
     } catch (_) {}
   }
 
