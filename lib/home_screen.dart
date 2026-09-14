@@ -44,7 +44,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       } catch (_) {}
       _check();
     });
-    _timer = Timer.periodic(const Duration(seconds: 20), (_) => _check());
+    _timer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (mounted) setState(() {}); // تحديث «راحتك القادمة بعد …» بشكل تنازليّ
+      _check();
+    });
   }
 
   Future<void> _refreshPerm() async {
@@ -163,13 +166,32 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String _fmtMin(int m) =>
       '${((m ~/ 60) % 24).toString().padLeft(2, '0')}:${(m % 60).toString().padLeft(2, '0')}';
 
+  /// صياغة عربيّة للدقائق (تمييز مفرد/مثنّى/جمع).
+  String _minsAr(int m) {
+    if (m == 1) return 'دقيقة';
+    if (m == 2) return 'دقيقتين';
+    if (m >= 3 && m <= 10) return '$m دقائق';
+    return '$m دقيقة';
+  }
+
+  /// صياغة عربيّة للساعات (تمييز مفرد/مثنّى/جمع).
+  String _hoursAr(int h) {
+    if (h == 1) return 'ساعة';
+    if (h == 2) return 'ساعتين';
+    if (h >= 3 && h <= 10) return '$h ساعات';
+    return '$h ساعة';
+  }
+
   String _nextLabel() {
     final n = BreakService.instance.nextStart();
     if (n == null) return 'التنبيه متوقّف';
-    final now = DateTime.now();
-    final sameDay = n.day == now.day && n.month == now.month;
-    final t = '${n.hour.toString().padLeft(2, '0')}:${n.minute.toString().padLeft(2, '0')}';
-    return sameDay ? 'الفترة القادمة اليوم $t' : 'الفترة القادمة غدًا $t';
+    final mins = n.difference(DateTime.now()).inMinutes;
+    if (mins <= 0) return 'راحتك القادمة الآن';
+    if (mins < 60) return 'راحتك القادمة بعد ${_minsAr(mins)}';
+    final h = mins ~/ 60;
+    final m = mins % 60;
+    if (m == 0) return 'راحتك القادمة بعد ${_hoursAr(h)}';
+    return 'راحتك القادمة بعد ${_hoursAr(h)} و${_minsAr(m)}';
   }
 
   @override
