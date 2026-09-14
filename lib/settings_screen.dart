@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'backup_service.dart';
 import 'break_screen.dart';
 import 'break_service.dart';
 import 'notify_service.dart';
@@ -23,6 +24,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late List<BreakPeriod> _periods;
   final _codeCtrl = TextEditingController();
   String _appVersion = '';
+  bool _deviceBackupOn = false; // هل مُنِح الوصول لذاكرة الجهاز (حفظ يبقى بعد الحذف)؟
 
   @override
   void initState() {
@@ -47,6 +49,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
             enabled: p.enabled))
         .toList();
     _codeCtrl.text = svc.bypassCode;
+    _refreshBackupAccess();
+  }
+
+  Future<void> _refreshBackupAccess() async {
+    final ok = await BackupService.hasAccess();
+    if (mounted) setState(() => _deviceBackupOn = ok);
+  }
+
+  /// يطلب صلاحية الوصول لذاكرة الجهاز، ثم يكتب النسخة الحاليّة فور منحها.
+  Future<void> _enableDeviceBackup() async {
+    await BackupService.requestAccess();
+    await _refreshBackupAccess();
+    if (_deviceBackupOn) {
+      await _persist();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('فُعّل الحفظ التلقائيّ على الجهاز ✅')));
+      }
+    }
   }
 
   @override
@@ -110,6 +131,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         showPhrases: _showPhrases,
         idleResetMinutes: _idleResetMinutes);
     await NotifyService.instance.rescheduleAll();
+    // نسخة احتياطية تلقائيّة في ملفّ مخفيّ بذاكرة الجهاز (تبقى بعد الحذف).
+    await BackupService.write(BreakService.instance.exportJson());
   }
 
   Future<void> _save() async {
@@ -229,6 +252,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             .toList();
       });
       await NotifyService.instance.rescheduleAll();
+      await BackupService.write(BreakService.instance.exportJson());
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('تمّ استيراد الإعدادات ✅')));
@@ -323,9 +347,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
               style: TextStyle(
                   fontWeight: FontWeight.bold, color: scheme.primary)),
           const SizedBox(height: 4),
+          // الحفظ التلقائيّ في ملفّ مخفيّ بذاكرة الجهاز (يبقى بعد حذف التطبيق).
+          Card(
+            color: _deviceBackupOn
+                ? scheme.primaryContainer.withValues(alpha: 0.35)
+                : scheme.errorContainer.withValues(alpha: 0.5),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                          _deviceBackupOn
+                              ? Icons.cloud_done
+                              : Icons.sd_storage,
+                          color: _deviceBackupOn
+                              ? Colors.green
+                              : scheme.error),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text('حفظ تلقائيّ على الجهاز (يبقى بعد الحذف)',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _deviceBackupOn
+                        ? 'مُفعّل: تُحفظ إعداداتك في ملفّ مخفيّ بذاكرة الجهاز، '
+                            'وتُستعاد تلقائيًّا إذا حذفتَ التطبيق ثمّ أعدتَ تثبيته.'
+                        : 'فعّله ليُحفظ إعدادك تلقائيًّا في ملفّ مخفيّ يبقى بعد '
+                            'حذف التطبيق، فيسترجعها التطبيق وحده بعد إعادة التثبيت. '
+                            'يتطلّب السماح بالوصول إلى الملفّات.',
+                    style: const TextStyle(fontSize: 13, height: 1.5),
+                  ),
+                  if (!_deviceBackupOn) ...[
+                    const SizedBox(height: 8),
+                    FilledButton.icon(
+                      onPressed: _enableDeviceBackup,
+                      icon: const Icon(Icons.open_in_new, size: 18),
+                      label: const Text('تفعيل الحفظ على الجهاز'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           const Text(
-            'صدّر إعداداتك واحفظها في ملاحظاتك؛ ولاستعادتها بعد إعادة التثبيت '
-            'الصقها في «استيراد» — فلا تفقد شيئًا.',
+            'أو يدويًّا: صدّر إعداداتك واحفظها في ملاحظاتك؛ ولاستعادتها الصقها '
+            'في «استيراد».',
             style: TextStyle(fontSize: 13, height: 1.5),
           ),
           const SizedBox(height: 8),

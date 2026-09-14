@@ -2,8 +2,10 @@ package com.alaoufi.health_reminder
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.core.content.FileProvider
@@ -38,6 +40,75 @@ class MainActivity : FlutterActivity() {
                             startActivity(intent)
                         }
                         result.success(true)
+                    }
+                    "hasAllFilesAccess" -> {
+                        // هل يملك التطبيق وصولًا لذاكرة الجهاز العامّة (ليكتب ملفّ
+                        // نسخة احتياطية يبقى بعد حذف التطبيق)؟
+                        val ok = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            Environment.isExternalStorageManager()
+                        } else {
+                            checkSelfPermission(
+                                android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                            ) == PackageManager.PERMISSION_GRANTED
+                        }
+                        result.success(ok)
+                    }
+                    "requestAllFilesAccess" -> {
+                        // يفتح طلب «الوصول إلى كل الملفّات» (أو صلاحية التخزين القديمة).
+                        try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                                val intent = Intent(
+                                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                                    Uri.parse("package:$packageName")
+                                )
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                startActivity(intent)
+                            } else {
+                                requestPermissions(
+                                    arrayOf(
+                                        android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                    ),
+                                    4201
+                                )
+                            }
+                        } catch (e: Exception) {
+                            try {
+                                val intent = Intent(
+                                    Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION
+                                )
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                startActivity(intent)
+                            } catch (_: Exception) {}
+                        }
+                        result.success(true)
+                    }
+                    "writeBackup" -> {
+                        // يكتب النسخة الاحتياطية في ملفّ مخفيّ بذاكرة الجهاز العامّة
+                        // (مجلّد Documents/.la_tajlis) — يبقى بعد حذف التطبيق.
+                        val json = call.argument<String>("json")
+                        if (json == null) {
+                            result.error("no_json", "لا بيانات", null)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            val file = backupFile()
+                            file.parentFile?.mkdirs()
+                            file.writeText(json)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("write_failed", e.message, null)
+                        }
+                    }
+                    "readBackup" -> {
+                        // يقرأ ملفّ النسخة الاحتياطية إن وُجد (لاستعادة الإعدادات بعد
+                        // إعادة التثبيت)، وإلّا يعيد null.
+                        try {
+                            val file = backupFile()
+                            if (file.exists()) result.success(file.readText())
+                            else result.success(null)
+                        } catch (e: Exception) {
+                            result.success(null)
+                        }
                     }
                     "isIgnoringBatteryOptimizations" -> {
                         // هل سُمح للتطبيق بتجاوز توفير البطارية؟ (شرط لعمل المنبّهات
@@ -93,6 +164,14 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    /// ملفّ النسخة الاحتياطية المخفيّ في ذاكرة الجهاز العامّة (يبقى بعد حذف التطبيق).
+    private fun backupFile(): File {
+        val docs = Environment.getExternalStoragePublicDirectory(
+            Environment.DIRECTORY_DOCUMENTS
+        )
+        return File(File(docs, ".la_tajlis"), "settings.json")
     }
 
     private fun installApk(path: String) {

@@ -16,6 +16,12 @@
     <!-- التحديث الذاتيّ: إنترنت + تثبيت الحزم -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- نسخة احتياطية في ملفّ مخفيّ بذاكرة الجهاز العامّة تبقى بعد حذف التطبيق -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"/>
 
     <application
         android:label="@string/app_name"
