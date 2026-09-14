@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import 'break_screen.dart';
 import 'break_service.dart';
 import 'notify_service.dart';
 
@@ -100,7 +101,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (t != null) onPick(t.hour * 60 + t.minute);
   }
 
-  Future<void> _save() async {
+  /// يحفظ الإعدادات ويعيد جدولة التنبيهات (بلا إغلاق الشاشة).
+  Future<void> _persist() async {
     await BreakService.instance.save(
         enabled: _enabled,
         periods: _periods,
@@ -108,10 +110,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
         showPhrases: _showPhrases,
         idleResetMinutes: _idleResetMinutes);
     await NotifyService.instance.rescheduleAll();
+  }
+
+  Future<void> _save() async {
+    await _persist();
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(const SnackBar(content: Text('حُفظ الإعداد')));
     Navigator.pop(context);
+  }
+
+  /// تجربة على الإعدادات المحفوظة: يحفظ أولًا ثم يعرض شاشة الاستراحة بمدّة الراحة
+  /// الفعليّة لأوّل فترة مفعّلة وبإعداد العبارات كما هو محفوظ (للخروج: ضغط مطوّل).
+  Future<void> _testSaved() async {
+    await _persist();
+    if (!mounted) return;
+    var restMin = 1; // بديل إن لا توجد فترة مفعّلة
+    for (final p in _periods) {
+      if (p.enabled && p.restMinutes > 0) {
+        restMin = p.restMinutes;
+        break;
+      }
+    }
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('تجربة على الإعدادات المحفوظة'),
+        duration: Duration(milliseconds: 900)));
+    await Navigator.of(context).push(MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => BreakScreen(
+          index: 9998,
+          restStart: 0,
+          end: DateTime.now().add(Duration(minutes: restMin))),
+    ));
   }
 
   String _currentJson() => jsonEncode({
@@ -323,6 +353,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onPressed: _save,
             icon: const Icon(Icons.save),
             label: const Text('حفظ'),
+          ),
+          const SizedBox(height: 10),
+          // تجربة على الإعدادات المحفوظة (يحفظ ثم يعرض شاشة الاستراحة الفعليّة).
+          OutlinedButton.icon(
+            onPressed: _testSaved,
+            icon: const Icon(Icons.play_circle_outline),
+            label: const Text('تجربة على الإعدادات المحفوظة'),
           ),
           const SizedBox(height: 20),
           Center(
