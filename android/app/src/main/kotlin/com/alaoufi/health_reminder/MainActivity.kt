@@ -2,6 +2,7 @@ package com.alaoufi.health_reminder
 
 import android.app.AlarmManager
 import android.app.KeyguardManager
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -227,6 +228,29 @@ class MainActivity : FlutterActivity() {
                                     Uri.parse("package:$packageName")
                                 )
                             )
+                        }
+                        result.success(true)
+                    }
+                    "hasFullScreenIntent" -> {
+                        // أندرويد 14+: إذن إشعارات ملء الشاشة (وإلّا تظهر كإشعار عاديّ).
+                        val ok = if (Build.VERSION.SDK_INT >=
+                            Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            (getSystemService(Context.NOTIFICATION_SERVICE)
+                                as NotificationManager).canUseFullScreenIntent()
+                        } else true
+                        result.success(ok)
+                    }
+                    "requestFullScreenIntent" -> {
+                        if (Build.VERSION.SDK_INT >=
+                            Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            try {
+                                val i = Intent(
+                                    Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
+                                    Uri.parse("package:$packageName")
+                                )
+                                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                startActivity(i)
+                            } catch (_: Exception) {}
                         }
                         result.success(true)
                     }
