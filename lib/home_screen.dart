@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'backup_service.dart';
@@ -24,6 +25,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _breakShowing = false;
   bool _starting = false;
   bool _battOk = true; // هل سُمح بتجاوز توفير البطارية؟ (لعمل المنبّه والجهاز مغلق)
+  bool _overlayPerm = true; // «العرض فوق التطبيقات» — يمنح فتح الشاشة فوق أي تطبيق
   bool _autostartDone = false; // أخفى المستخدم بطاقة التشغيل التلقائيّ (لا يمكن كشفها آليًّا)
 
   /// قناة أصليّة لإرسال التطبيق إلى الخلفية (العودة للتطبيق السابق).
@@ -80,6 +82,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           await _platform.invokeMethod<bool>('isIgnoringBatteryOptimizations');
       if (mounted) setState(() => _battOk = b ?? true);
     } catch (_) {}
+    try {
+      final p = await FlutterOverlayWindow.isPermissionGranted();
+      if (mounted) setState(() => _overlayPerm = p);
+    } catch (_) {}
+  }
+
+  Future<void> _requestOverlayPerm() async {
+    try {
+      await FlutterOverlayWindow.requestPermission();
+    } catch (_) {}
+    await _refreshPerm();
   }
 
   Future<void> _loadAutostartFlag() async {
@@ -307,6 +320,44 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 title: const Text('تشغيل/إيقاف',
                     style: TextStyle(fontWeight: FontWeight.bold)),
               ),
+              // بطاقة «العرض فوق التطبيقات» — الشرط الحاسم لِتقتحم الاستراحة الشاشة
+              // فوق أي تطبيق (يوتيوب مثلًا)؛ فبدونه يمنع أندرويد الفتح من الخلفية.
+              if (!_overlayPerm)
+                Card(
+                  color: scheme.errorContainer.withValues(alpha: 0.6),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.open_in_full, color: scheme.error),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text('السيطرة على الشاشة فوق أي تطبيق (مهمّ)',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'لِتقتحم الاستراحة الشاشة وأنت في تطبيق آخر (يوتيوب مثلًا) '
+                          'أو والجهاز مقفل، امنح «العرض فوق التطبيقات». بدونه يمنع '
+                          'النظام فتح الشاشة من الخلفية، فتظهر عند فتح التطبيق فقط.',
+                          style: TextStyle(fontSize: 13, height: 1.5),
+                        ),
+                        const SizedBox(height: 8),
+                        FilledButton.icon(
+                          onPressed: _requestOverlayPerm,
+                          icon: const Icon(Icons.open_in_new, size: 18),
+                          label: const Text('منح الصلاحية'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               // بطاقة تجاوز توفير البطارية (تظهر حتى يُسمح) — شرط لعمل المنبّه
               // الدقيق في وقته والجهاز مغلق دون أن يوقفه النظام.
               if (!_battOk)
