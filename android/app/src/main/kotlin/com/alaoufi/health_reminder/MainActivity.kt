@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -24,6 +25,12 @@ import java.io.File
 class MainActivity : FlutterActivity() {
     private val channel = "com.alaoufi.health_reminder/installer"
 
+    companion object {
+        /// قفل صارم فعّال: يمنع مغادرة شاشة الاستراحة بزرّ الهوم/السحب من الأسفل.
+        @JvmStatic
+        var breakLockActive = false
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         applyBreakWindowFlags()
@@ -33,6 +40,24 @@ class MainActivity : FlutterActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         applyBreakWindowFlags()
+    }
+
+    /// عند محاولة المغادرة (زرّ الهوم/السحب من الأسفل/المهامّ) أثناء القفل الصارم:
+    /// أعِد الشاشة إلى الواجهة فورًا — فلا تُغلق إلا بالرمز أو الضغط المطوّل.
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (breakLockActive) {
+            try {
+                val i = Intent(this, MainActivity::class.java).apply {
+                    addFlags(
+                        Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    )
+                }
+                startActivity(i)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     /// عند الفتح من منبّه الراحة: أيقِظ الشاشة واعرِض فوق قفل الشاشة (قفل صارم).
@@ -202,6 +227,22 @@ class MainActivity : FlutterActivity() {
                                     Uri.parse("package:$packageName")
                                 )
                             )
+                        }
+                        result.success(true)
+                    }
+                    "setBreakLock" -> {
+                        // يُفعّل/يوقف القفل الصارم (منع المغادرة أثناء الاستراحة).
+                        breakLockActive = call.argument<Boolean>("on") ?: false
+                        result.success(true)
+                    }
+                    "playChime" -> {
+                        // جرس قصير (صوت الإشعار الافتراضيّ) — لبداية/نهاية الراحة.
+                        try {
+                            val uri = RingtoneManager.getDefaultUri(
+                                RingtoneManager.TYPE_NOTIFICATION
+                            )
+                            RingtoneManager.getRingtone(applicationContext, uri)?.play()
+                        } catch (_: Exception) {
                         }
                         result.success(true)
                     }

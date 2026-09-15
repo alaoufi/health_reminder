@@ -67,6 +67,7 @@ class BreakService extends ChangeNotifier {
   static const _kShowPhrases = 'hr_show_phrases'; // عرض العبارات أم شاشة صامتة
   static const _kIdleReset = 'hr_idle_reset'; // عتبة الخمول (دقائق) لاعتباره راحة
   static const _kAnchor = 'hr_anchor'; // مرساة الدورة: بداية شوط العمل الحاليّ
+  static const _kSound = 'hr_sound_alert'; // جرس عند بداية/نهاية الراحة
 
   bool _enabled = true;
   List<BreakPeriod> _periods = [];
@@ -75,6 +76,7 @@ class BreakService extends ChangeNotifier {
   DateTime? _anchor; // آخر بداية شوط عمل — الراحة القادمة = المرساة + مدّة العمل
   bool _showPhrases = true; // true: عبارات تحفيزية، false: شاشة صامتة بعدّاد فقط
   int _idleResetMinutes = 15; // خمول ≥ هذه المدّة (بإطفاء الشاشة) يُصفّر عدّاد العمل
+  bool _soundAlert = false; // جرس عند بداية ونهاية الراحة (اختياريّ، مطفأ افتراضيًّا)
   bool _wasFresh = false; // true إن لم تكن هناك إعدادات محفوظة عند التحميل (تثبيت جديد)
 
   bool get enabled => _enabled;
@@ -84,12 +86,14 @@ class BreakService extends ChangeNotifier {
   String get bypassCode => _bypassCode;
   bool get hasBypassCode => _bypassCode.trim().isNotEmpty;
   bool get showPhrases => _showPhrases;
+  bool get soundAlert => _soundAlert;
   int get idleResetMinutes => _idleResetMinutes;
 
   Future<void> load() async {
     try {
       final sp = await SharedPreferences.getInstance();
       _enabled = sp.getBool(_kEnabled) ?? true;
+      _soundAlert = sp.getBool(_kSound) ?? false;
       _bypassCode = sp.getString(_kCode) ?? '';
       _showPhrases = sp.getBool(_kShowPhrases) ?? true;
       _idleResetMinutes = sp.getInt(_kIdleReset) ?? 15;
@@ -129,11 +133,13 @@ class BreakService extends ChangeNotifier {
     String? bypassCode,
     bool? showPhrases,
     int? idleResetMinutes,
+    bool? soundAlert,
   }) async {
     if (enabled != null) _enabled = enabled;
     if (periods != null) _periods = periods.take(3).toList();
     if (bypassCode != null) _bypassCode = bypassCode.trim();
     if (showPhrases != null) _showPhrases = showPhrases;
+    if (soundAlert != null) _soundAlert = soundAlert;
     if (idleResetMinutes != null) {
       _idleResetMinutes = idleResetMinutes.clamp(1, 120);
     }
@@ -146,6 +152,7 @@ class BreakService extends ChangeNotifier {
         _kPeriods, jsonEncode(_periods.map((p) => p.toJson()).toList()));
     await sp.setString(_kCode, _bypassCode);
     await sp.setBool(_kShowPhrases, _showPhrases);
+    await sp.setBool(_kSound, _soundAlert);
     await sp.setInt(_kIdleReset, _idleResetMinutes);
     if (_anchor != null) {
       await sp.setInt(_kAnchor, _anchor!.millisecondsSinceEpoch);
@@ -305,6 +312,7 @@ class BreakService extends ChangeNotifier {
         'v': 1,
         'enabled': _enabled,
         'showPhrases': _showPhrases,
+        'soundAlert': _soundAlert,
         'idleResetMinutes': _idleResetMinutes,
         'bypassCode': _bypassCode,
         'periods': _periods.map((p) => p.toJson()).toList(),
@@ -320,6 +328,7 @@ class BreakService extends ChangeNotifier {
       await save(
         enabled: j['enabled'] as bool?,
         showPhrases: j['showPhrases'] as bool?,
+        soundAlert: j['soundAlert'] as bool?,
         idleResetMinutes: (j['idleResetMinutes'] as num?)?.toInt(),
         bypassCode: j['bypassCode'] as String?,
         periods: periods,
