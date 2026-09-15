@@ -26,6 +26,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _starting = false;
   bool _battOk = true; // هل سُمح بتجاوز توفير البطارية؟ (لعمل المنبّه والجهاز مغلق)
   bool _overlayPerm = true; // «العرض فوق التطبيقات» — يمنح فتح الشاشة فوق أي تطبيق
+  bool _fsiOk = true; // إذن إشعارات ملء الشاشة (أندرويد 14+) — لِتقتحم لا تكتفي بإشعار
   bool _autostartDone = false; // أخفى المستخدم بطاقة التشغيل التلقائيّ (لا يمكن كشفها آليًّا)
 
   /// قناة أصليّة لإرسال التطبيق إلى الخلفية (العودة للتطبيق السابق).
@@ -86,11 +87,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       final p = await FlutterOverlayWindow.isPermissionGranted();
       if (mounted) setState(() => _overlayPerm = p);
     } catch (_) {}
+    try {
+      final f = await _platform.invokeMethod<bool>('hasFullScreenIntent');
+      if (mounted) setState(() => _fsiOk = f ?? true);
+    } catch (_) {}
   }
 
   Future<void> _requestOverlayPerm() async {
     try {
       await FlutterOverlayWindow.requestPermission();
+    } catch (_) {}
+    await _refreshPerm();
+  }
+
+  Future<void> _requestFsi() async {
+    try {
+      await _platform.invokeMethod('requestFullScreenIntent');
     } catch (_) {}
     await _refreshPerm();
   }
@@ -353,6 +365,43 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           onPressed: _requestOverlayPerm,
                           icon: const Icon(Icons.open_in_new, size: 18),
                           label: const Text('منح الصلاحية'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              // بطاقة «إشعارات ملء الشاشة» (أندرويد 14+) — لِتقتحم الاستراحة الشاشة
+              // والجهاز مقفل بدل الاكتفاء بإشعار.
+              if (!_fsiOk)
+                Card(
+                  color: scheme.errorContainer.withValues(alpha: 0.6),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.fullscreen, color: scheme.error),
+                            const SizedBox(width: 8),
+                            const Expanded(
+                              child: Text('إشعارات ملء الشاشة (مهمّ)',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'كي تقتحم الاستراحة الشاشة والجهاز مقفل (بدل إشعار فقط)، '
+                          'فعّل «إشعارات ملء الشاشة» لهذا التطبيق.',
+                          style: TextStyle(fontSize: 13, height: 1.5),
+                        ),
+                        const SizedBox(height: 8),
+                        FilledButton.icon(
+                          onPressed: _requestFsi,
+                          icon: const Icon(Icons.open_in_new, size: 18),
+                          label: const Text('تفعيل'),
                         ),
                       ],
                     ),
