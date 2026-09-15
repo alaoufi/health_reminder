@@ -187,15 +187,42 @@ class BreakService extends ChangeNotifier {
     } catch (_) {}
   }
 
-  /// الفترة المفعّلة التي يقع «الآن» ضمن نافذتها (أو null).
-  BreakPeriod? _periodActiveAt(DateTime now) {
-    for (final p in _periods) {
-      if (!p.enabled) continue;
-      final ws = _todayAt(p.startMinutes);
-      final we = _todayAt(p.endMinutes);
-      if (!now.isBefore(ws) && now.isBefore(we)) return p;
+  /// نافذة الفترة المحيطة بـ [now] كـ (بداية، نهاية) — **تدعم عبور منتصف الليل**
+  /// (مثل ١٠:٠٠→٠٢:٠٠). تعيد null إن كان «الآن» خارج النافذة.
+  ({DateTime ws, DateTime we})? _windowAround(BreakPeriod p, DateTime now) {
+    final base = DateTime(now.year, now.month, now.day);
+    final s = p.startMinutes, e = p.endMinutes;
+    if (s <= e) {
+      // نافذة داخل اليوم نفسه.
+      final ws = base.add(Duration(minutes: s));
+      final we = base.add(Duration(minutes: e));
+      if (!now.isBefore(ws) && now.isBefore(we)) return (ws: ws, we: we);
+      return null;
+    }
+    // تعبر منتصف الليل: [start..24:00) ثمّ [00:00..end).
+    final nowMin = now.hour * 60 + now.minute;
+    if (nowMin >= s) {
+      // في الجزء المسائيّ — تنتهي غدًا.
+      final ws = base.add(Duration(minutes: s));
+      final we = base.add(const Duration(days: 1)).add(Duration(minutes: e));
+      return (ws: ws, we: we);
+    }
+    if (nowMin < e) {
+      // في جزء ما بعد منتصف الليل — بدأت أمس.
+      final ws =
+          base.subtract(const Duration(days: 1)).add(Duration(minutes: s));
+      final we = base.add(Duration(minutes: e));
+      return (ws: ws, we: we);
     }
     return null;
+  }
+
+  /// أقرب بداية نافذة قادمة للفترة (بعد [now]) — لوقت بدء الفترة (لا يعبر منتصف الليل هنا).
+  DateTime _nextWindowStart(BreakPeriod p, DateTime now) {
+    final base = DateTime(now.year, now.month, now.day);
+    var ws = base.add(Duration(minutes: p.startMinutes));
+    if (!ws.isAfter(now)) ws = ws.add(const Duration(days: 1));
+    return ws;
   }
 
   /// الراحة القادمة (وقت البدء + مدّة الراحة) بنموذج **التدحرج من الآن**:
@@ -204,25 +231,24 @@ class BreakService extends ChangeNotifier {
     if (!_enabled) return null;
     final now = DateTime.now();
     final anchor = _anchor ?? now;
-    final active = _periodActiveAt(now);
-    if (active != null) {
-      final ws = _todayAt(active.startMinutes);
-      final we = _todayAt(active.endMinutes);
-      var nb = anchor.add(Duration(minutes: active.workMinutes));
-      if (nb.isBefore(ws)) nb = ws.add(Duration(minutes: active.workMinutes));
+    for (final p in _periods) {
+      if (!p.enabled) continue;
+      final w = _windowAround(p, now);
+      if (w == null) continue;
+      var nb = anchor.add(Duration(minutes: p.workMinutes));
+      if (nb.isBefore(w.ws)) nb = w.ws.add(Duration(minutes: p.workMinutes));
       // فات تمامًا (تجاوز نهاية الراحة) ⇒ ابدأ دورة جديدة من الآن.
-      if (!nb.add(Duration(minutes: active.restMinutes)).isAfter(now)) {
-        nb = now.add(Duration(minutes: active.workMinutes));
+      if (!nb.add(Duration(minutes: p.restMinutes)).isAfter(now)) {
+        nb = now.add(Duration(minutes: p.workMinutes));
       }
-      if (nb.isBefore(we)) return (start: nb, rest: active.restMinutes);
+      if (nb.isBefore(w.we)) return (start: nb, rest: p.restMinutes);
     }
     // خارج النوافذ: أقرب بداية فترة قادمة + مدّة العمل.
     DateTime? best;
     int bestRest = 5;
     for (final p in _periods) {
       if (!p.enabled) continue;
-      var ws = _todayAt(p.startMinutes);
-      if (!ws.isAfter(now)) ws = ws.add(const Duration(days: 1));
+      final ws = _nextWindowStart(p, now);
       final cand = ws.add(Duration(minutes: p.workMinutes));
       if (best == null || cand.isBefore(best)) {
         best = cand;
