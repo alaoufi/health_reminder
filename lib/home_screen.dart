@@ -20,6 +20,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Timer? _timer;
+  int _tick = 0; // عدّاد الثواني (لتحديث العدّاد الحيّ وفحص الراحة كلّ ٢٠ ثانية)
   bool _breakShowing = false;
   bool _starting = false;
   bool _overlayPerm = false;
@@ -45,9 +46,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       await _scheduleNativeBreak(); // المنبّه الدقيق (setAlarmClock) — الأوثق.
       _check();
     });
-    _timer = Timer.periodic(const Duration(seconds: 20), (_) {
-      if (mounted) setState(() {}); // تحديث «راحتك القادمة بعد …» بشكل تنازليّ
-      _check();
+    // عدّاد حيّ كلّ ثانية لتحديث «راحتك القادمة بعد MM:SS»؛ وفحص الراحة كلّ ٢٠ ثانية.
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+      _tick++;
+      if (_tick % 20 == 0) _check();
     });
   }
 
@@ -199,9 +202,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String _nextLabel() {
     final n = BreakService.instance.nextStart();
     if (n == null) return 'التنبيه متوقّف';
-    final mins = n.difference(DateTime.now()).inMinutes;
-    if (mins <= 0) return 'راحتك القادمة الآن';
-    if (mins < 60) return 'راحتك القادمة بعد ${_minsAr(mins)}';
+    final d = n.difference(DateTime.now());
+    if (d.inSeconds <= 0) return 'راحتك القادمة الآن';
+    // أقلّ من ساعة: عدّاد حيّ MM:SS يتناقص كلّ ثانية.
+    if (d.inMinutes < 60) {
+      final m = d.inMinutes;
+      final s = d.inSeconds % 60;
+      return 'راحتك القادمة بعد '
+          '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    }
+    final mins = d.inMinutes;
     final h = mins ~/ 60;
     final m = mins % 60;
     if (m == 0) return 'راحتك القادمة بعد ${_hoursAr(h)}';
