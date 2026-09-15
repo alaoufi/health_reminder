@@ -18,6 +18,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   late bool _enabled;
   late bool _showPhrases;
+  late bool _soundAlert;
   late int _idleResetMinutes;
   late List<BreakPeriod> _periods;
   final _codeCtrl = TextEditingController();
@@ -30,6 +31,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final svc = BreakService.instance;
     _enabled = svc.enabled;
     _showPhrases = svc.showPhrases;
+    _soundAlert = svc.soundAlert;
     _idleResetMinutes = svc.idleResetMinutes;
     // رقم النسخة (يظهر أسفل الإعدادات).
     PackageInfo.fromPlatform().then((info) {
@@ -93,6 +95,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {
         _enabled = svc.enabled;
         _showPhrases = svc.showPhrases;
+        _soundAlert = svc.soundAlert;
         _idleResetMinutes = svc.idleResetMinutes;
         _codeCtrl.text = svc.bypassCode;
         _periods = svc.periods
@@ -175,6 +178,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         periods: _periods,
         bypassCode: _codeCtrl.text,
         showPhrases: _showPhrases,
+        soundAlert: _soundAlert,
         idleResetMinutes: _idleResetMinutes);
     await NotifyService.instance.rescheduleAll();
     // نسخة احتياطية تلقائيّة في ملفّ مخفيّ بذاكرة الجهاز (تبقى بعد الحذف).
@@ -245,6 +249,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             subtitle: Text(_showPhrases
                 ? 'تظهر عبارات صحّية متغيّرة على شاشة الاستراحة.'
                 : 'شاشة صامتة بعدّاد فقط بلا عبارات.'),
+            contentPadding: EdgeInsets.zero,
+          ),
+          SwitchListTile(
+            value: _soundAlert,
+            onChanged: (v) => setState(() => _soundAlert = v),
+            title: const Text('جرس تنبيه (بداية/نهاية الراحة)',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            subtitle: Text(_soundAlert
+                ? 'يُصدر جرسًا قصيرًا عند بدء الراحة وعند انتهائها.'
+                : 'صامت تمامًا (بلا صوت).'),
             contentPadding: EdgeInsets.zero,
           ),
           const Divider(),

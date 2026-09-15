@@ -63,6 +63,18 @@ class _BreakScreenState extends State<BreakScreen> {
     try {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     } catch (_) {}
+    // قفل صارم للاستراحات الحقيقية: يمنع المغادرة بزرّ الهوم/السحب من الأسفل.
+    if (widget.moveToBackOnClose) {
+      try {
+        _platform.invokeMethod('setBreakLock', {'on': true});
+      } catch (_) {}
+    }
+    // جرس بداية الراحة (إن فُعّل الخيار).
+    if (BreakService.instance.soundAlert) {
+      try {
+        _platform.invokeMethod('playChime');
+      } catch (_) {}
+    }
     _computeRemaining();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
       _computeRemaining();
@@ -88,6 +100,17 @@ class _BreakScreenState extends State<BreakScreen> {
     _finishing = true;
     _tick?.cancel();
     _holdTimer?.cancel();
+    // ارفع القفل الصارم وشغّل جرس النهاية (إن فُعّل) قبل الإغلاق.
+    if (widget.moveToBackOnClose) {
+      try {
+        await _platform.invokeMethod('setBreakLock', {'on': false});
+      } catch (_) {}
+    }
+    if (BreakService.instance.soundAlert) {
+      try {
+        await _platform.invokeMethod('playChime');
+      } catch (_) {}
+    }
     await BreakService.instance.markDone(widget.index, widget.restStart);
     // pop() المباشر لا يحجبه PopScope(canPop:false) — بخلاف maybePop() الذي كان
     // يُحترَم فيبقى العدّاد ثابتًا على 00:00 بلا إغلاق (سبب تجمّد الشاشة).
@@ -165,6 +188,10 @@ class _BreakScreenState extends State<BreakScreen> {
   void dispose() {
     _tick?.cancel();
     _holdTimer?.cancel();
+    // أمان: ارفع القفل الصارم دائمًا عند التخلّص من الشاشة (كي لا يبقى الجهاز محبوسًا).
+    try {
+      _platform.invokeMethod('setBreakLock', {'on': false});
+    } catch (_) {}
     // استعادة شريطي الحالة والتنقّل بعد انتهاء الاستراحة.
     try {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
