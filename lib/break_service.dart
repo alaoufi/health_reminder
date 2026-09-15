@@ -295,6 +295,49 @@ class BreakService extends ChangeNotifier {
   /// موعد الراحة القادمة — للعرض في الرئيسية وجدولة المنبّه.
   DateTime? nextStart() => _nextBreak()?.start;
 
+  /// مدّة العمل الحاليّة (دقائق): للفترة النشطة الآن، وإلّا أولى المفعّلة، وإلّا 30.
+  int currentWorkMinutes() {
+    final now = DateTime.now();
+    for (final p in _periods) {
+      if (p.enabled && _windowAround(p, now) != null) return p.workMinutes;
+    }
+    for (final p in _periods) {
+      if (p.enabled) return p.workMinutes;
+    }
+    return 30;
+  }
+
+  /// يكتب حالة الجدولة للخدمة الأماميّة الأصليّة (تقرؤها بالبادئة flutter.):
+  /// موعد الراحة القادمة، ومدّة العمل، وعتبة الخمول — بالمللي ثانية.
+  Future<void> writeNativeState() async {
+    try {
+      final sp = await SharedPreferences.getInstance();
+      final n = _enabled ? nextStart() : null;
+      await sp.setInt('hr_next_ms', n?.millisecondsSinceEpoch ?? 0);
+      await sp.setInt('hr_work_ms', currentWorkMinutes() * 60000);
+      await sp.setInt('hr_idle_ms', _idleResetMinutes * 60000);
+    } catch (_) {}
+  }
+
+  /// يعيد قراءة المرساة من التخزين (قد تكون الخدمة الأصليّة صفّرتها بالخمول).
+  /// نستدعي reload() كي نلتقط ما كتبته الخدمة الأصليّة لا القيمة المخزّنة بالذاكرة.
+  Future<void> reloadAnchor() async {
+    try {
+      final sp = await SharedPreferences.getInstance();
+      await sp.reload();
+      final am = sp.getInt(_kAnchor);
+      _anchor = am != null ? DateTime.fromMillisecondsSinceEpoch(am) : null;
+    } catch (_) {}
+  }
+
+  /// علم «استراحة نشطة الآن» — تقرؤه الخدمة كي لا تُعيد فتح الاستراحة أثناءها.
+  Future<void> setBreakActiveFlag(bool v) async {
+    try {
+      final sp = await SharedPreferences.getInstance();
+      await sp.setBool('hr_break_active', v);
+    } catch (_) {}
+  }
+
   /// كل أوقات بدء الراحات (لكل الفترات المفعّلة) — لجدولة الإشعارات.
   List<int> allRestStarts() {
     final out = <int>[];

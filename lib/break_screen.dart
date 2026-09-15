@@ -63,6 +63,8 @@ class _BreakScreenState extends State<BreakScreen> {
     try {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     } catch (_) {}
+    // علم «استراحة نشطة» كي لا تُعيد الخدمة الأماميّة فتحها أثناءها.
+    BreakService.instance.setBreakActiveFlag(true);
     // قفل صارم للاستراحات الحقيقية: يمنع المغادرة بزرّ الهوم/السحب من الأسفل.
     if (widget.moveToBackOnClose) {
       try {
@@ -188,7 +190,9 @@ class _BreakScreenState extends State<BreakScreen> {
   void dispose() {
     _tick?.cancel();
     _holdTimer?.cancel();
-    // أمان: ارفع القفل الصارم دائمًا عند التخلّص من الشاشة (كي لا يبقى الجهاز محبوسًا).
+    // أمان: ارفع القفل الصارم وعلم النشاط دائمًا عند التخلّص (كي لا يُحبَس الجهاز
+    // ولا تتوقّف الخدمة عن الجدولة).
+    BreakService.instance.setBreakActiveFlag(false);
     try {
       _platform.invokeMethod('setBreakLock', {'on': false});
     } catch (_) {}

@@ -60,12 +60,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _scheduleNativeBreak() async {
     try {
       final svc = BreakService.instance;
+      await svc.writeNativeState(); // حالة الجدولة للخدمة الأماميّة.
       final n = svc.nextStart();
       if (!svc.enabled || n == null) {
         await _platform.invokeMethod('cancelExactBreak');
+        await _platform.invokeMethod('stopBreakService');
       } else {
         await _platform.invokeMethod(
             'scheduleExactBreak', {'epoch': n.millisecondsSinceEpoch});
+        // خدمة أماميّة تُبقي العمليّة حيّة فتظهر الاستراحة حتى أثناء استخدام الجوال.
+        await _platform.invokeMethod('startBreakService');
       }
     } catch (_) {}
   }
@@ -128,8 +132,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _refreshPerm();
-      _check();
-      _scheduleNativeBreak(); // أعِد جدولة الراحة القادمة عند العودة للتطبيق.
+      // أعِد قراءة المرساة (قد تكون الخدمة صفّرتها بالخمول) قبل الفحص والجدولة.
+      BreakService.instance.reloadAnchor().then((_) {
+        if (!mounted) return;
+        setState(() {});
+        _check();
+        _scheduleNativeBreak();
+      });
     }
   }
 

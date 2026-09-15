@@ -230,6 +230,23 @@ class MainActivity : FlutterActivity() {
                         }
                         result.success(true)
                     }
+                    "startBreakService" -> {
+                        try {
+                            val i = Intent(this, BreakForegroundService::class.java)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                startForegroundService(i)
+                            } else {
+                                startService(i)
+                            }
+                        } catch (_: Exception) {}
+                        result.success(true)
+                    }
+                    "stopBreakService" -> {
+                        try {
+                            stopService(Intent(this, BreakForegroundService::class.java))
+                        } catch (_: Exception) {}
+                        result.success(true)
+                    }
                     "setBreakLock" -> {
                         // يُفعّل/يوقف القفل الصارم (منع المغادرة أثناء الاستراحة).
                         breakLockActive = call.argument<Boolean>("on") ?: false

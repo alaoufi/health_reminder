@@ -51,6 +51,17 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
+        <!-- خدمة أماميّة دائمة: تُبقي العمليّة حيّة فتظهر الاستراحة حتى أثناء
+             استخدام الجوال، وتنفّذ منطق الخمول (تصفير الدورة بعد إطفاء طويل). -->
+        <service
+            android:name=".BreakForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="health_movement_break_reminder"/>
+        </service>
+
         <!-- مُستقبِل منبّه الراحة (setAlarmClock): يعرض إشعار ملء الشاشة في وقتها -->
         <receiver
             android:name=".BreakAlarmReceiver"

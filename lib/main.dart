@@ -72,6 +72,9 @@ Future<void> main() async {
     FlutterError.onError = (d) => startupErrors.add('Flutter: ${d.exceptionAsString()}');
 
     await _safe('settings', () => BreakService.instance.load());
+    // نظّف علم «استراحة نشطة» عند الإقلاع (قد يكون عالقًا من جلسة قُتلت) كي لا
+    // تتوقّف الخدمة عن الجدولة؛ تُعيده شاشة الاستراحة لو ظهرت.
+    await _safe('breakflag', () => BreakService.instance.setBreakActiveFlag(false));
     // مدير المنبّهات الخلفيّة الدقيقة (لعرض القفل في وقت الراحة حتى لو التطبيق مغلق).
     await _safe('alarm', () => AndroidAlarmManager.initialize());
     // ملاحظة: تهيئة الإشعارات مؤجَّلة إلى ما بعد ظهور الواجهة (في HomeScreen) كي لا
