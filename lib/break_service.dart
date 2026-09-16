@@ -307,6 +307,18 @@ class BreakService extends ChangeNotifier {
     return 30;
   }
 
+  /// مدّة الراحة الحاليّة (دقائق): للفترة النشطة الآن، وإلّا أولى المفعّلة، وإلّا 5.
+  int currentRestMinutes() {
+    final now = DateTime.now();
+    for (final p in _periods) {
+      if (p.enabled && _windowAround(p, now) != null) return p.restMinutes;
+    }
+    for (final p in _periods) {
+      if (p.enabled) return p.restMinutes;
+    }
+    return 5;
+  }
+
   /// يكتب حالة الجدولة للخدمة الأماميّة الأصليّة (تقرؤها بالبادئة flutter.):
   /// موعد الراحة القادمة، ومدّة العمل، وعتبة الخمول — بالمللي ثانية.
   Future<void> writeNativeState() async {
@@ -315,6 +327,7 @@ class BreakService extends ChangeNotifier {
       final n = _enabled ? nextStart() : null;
       await sp.setInt('hr_next_ms', n?.millisecondsSinceEpoch ?? 0);
       await sp.setInt('hr_work_ms', currentWorkMinutes() * 60000);
+      await sp.setInt('hr_rest_ms', currentRestMinutes() * 60000);
       await sp.setInt('hr_idle_ms', _idleResetMinutes * 60000);
     } catch (_) {}
   }
