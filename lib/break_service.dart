@@ -109,6 +109,13 @@ class BreakService extends ChangeNotifier {
       }
       final am = sp.getInt(_kAnchor);
       _anchor = am != null ? DateTime.fromMillisecondsSinceEpoch(am) : null;
+      // مفعّل بلا مرساة محفوظة (تثبيت جديد/لم تُحفظ إعدادات بعد): ثبِّت المرساة على
+      // «الآن» مرّة واحدة واحفظها — وإلّا كان `_anchor ?? now` يُحسب من «الآن» في
+      // كل رسم فيتجمّد العدّاد على مدّة العمل (٦٠د ≈ ٥٩:٥٩) بلا تناقص.
+      if (_enabled && _anchor == null) {
+        _anchor = DateTime.now();
+        await sp.setInt(_kAnchor, _anchor!.millisecondsSinceEpoch);
+      }
       final today = _dayKey();
       _doneKeys = (sp.getStringList(_kDone) ?? const [])
           .where((k) => k.startsWith('$today-'))
@@ -346,6 +353,11 @@ class BreakService extends ChangeNotifier {
       await sp.reload();
       final am = sp.getInt(_kAnchor);
       _anchor = am != null ? DateTime.fromMillisecondsSinceEpoch(am) : null;
+      // مفعّل بلا مرساة: ثبِّتها واحفظها (لئلّا يعود العدّاد للتجمّد عند العودة).
+      if (_enabled && _anchor == null) {
+        _anchor = DateTime.now();
+        await sp.setInt(_kAnchor, _anchor!.millisecondsSinceEpoch);
+      }
     } catch (_) {}
   }
 
