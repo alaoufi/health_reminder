@@ -244,9 +244,15 @@ class BreakService extends ChangeNotifier {
       if (w == null) continue;
       var nb = anchor.add(Duration(minutes: p.workMinutes));
       if (nb.isBefore(w.ws)) nb = w.ws.add(Duration(minutes: p.workMinutes));
-      // فات تمامًا (تجاوز نهاية الراحة) ⇒ ابدأ دورة جديدة من الآن.
-      if (!nb.add(Duration(minutes: p.restMinutes)).isAfter(now)) {
-        nb = now.add(Duration(minutes: p.workMinutes));
+      // إن فاتت الراحة تمامًا: تقدّم بدورات كاملة (عمل+راحة) إلى أوّل راحة غير
+      // فائتة — لا نُعيد الضبط إلى «الآن» في كل رسم (كان يُجمّد العدّاد على مدّة
+      // العمل، مثل 59:59). هكذا يبقى العدّاد مستقرًّا متناقصًا.
+      final cycle = Duration(minutes: p.workMinutes + p.restMinutes);
+      var guard = 0;
+      while (!nb.add(Duration(minutes: p.restMinutes)).isAfter(now) &&
+          guard < 100000) {
+        nb = nb.add(cycle);
+        guard++;
       }
       if (nb.isBefore(w.we)) return (start: nb, rest: p.restMinutes);
     }
