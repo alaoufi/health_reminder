@@ -32,7 +32,7 @@ class _OverlayBreakState extends State<OverlayBreak> {
   static const int _fallbackMinutes = 5;
 
   /// مخرج الطوارئ: مدّة الضغط المطوّل المطلوبة للإغلاق (طويلة نسبيًّا عمدًا).
-  static const Duration _holdToClose = Duration(minutes: 5);
+  static const Duration _holdToClose = Duration(seconds: 5);
   Timer? _holdTimer;
   double _holdProgress = 0; // 0..1 تقدّم الضغط المطوّل
 
@@ -312,7 +312,7 @@ class _OverlayBreakState extends State<OverlayBreak> {
                       const SizedBox(height: 6),
                       Text(
                         'للطوارئ: اضغط مطوّلًا في أي مكان '
-                        '${_holdToClose.inMinutes} دقائق متواصلة للإغلاق',
+                        '${_holdToClose.inSeconds} ثوانٍ متواصلة للإغلاق',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
                             color: Colors.white54, fontSize: 12),
