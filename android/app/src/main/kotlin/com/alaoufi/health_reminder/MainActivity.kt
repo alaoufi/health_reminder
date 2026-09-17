@@ -88,6 +88,32 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channel)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
+                    "consumeBreakRequest" -> {
+                        val launch = intent
+                        val end = launch?.getLongExtra("break_end_ms", 0L) ?: 0L
+                        val requested = launch?.getBooleanExtra("show_break", false) == true
+                        launch?.removeExtra("show_break")
+                        launch?.removeExtra("break_end_ms")
+                        result.success(if (requested && end > System.currentTimeMillis()) end else null)
+                    }
+                    "hasNotifications" -> result.success(
+                        androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled()
+                    )
+                    "requestNotifications" -> {
+                        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 8120)
+                        } else {
+                            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+                        }
+                        result.success(true)
+                    }
+                    "hasExactAlarm" -> result.success(
+                        Build.VERSION.SDK_INT < 31 || (getSystemService(Context.ALARM_SERVICE) as AlarmManager).canScheduleExactAlarms()
+                    )
+                    "requestExactAlarm" -> {
+                        if (Build.VERSION.SDK_INT >= 31) startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName")))
+                        result.success(true)
+                    }
                     "canInstall" -> {
                         val can = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             packageManager.canRequestPackageInstalls()

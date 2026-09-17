@@ -39,5 +39,14 @@ void main() {
           restMinutes: 5);
       expect(p.restStarts(), isEmpty);
     });
+
+    test('يدعم الراحات داخل نافذة تعبر منتصف الليل', () {
+      final p = BreakPeriod(
+          startMinutes: 22 * 60,
+          endMinutes: 2 * 60,
+          workMinutes: 60,
+          restMinutes: 15);
+      expect(p.restStarts(), [23 * 60, 15, 90]);
+    });
   });
 }

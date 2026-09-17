@@ -21,7 +21,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Timer? _timer;
-  int _tick = 0; // عدّاد الثواني (لتحديث العدّاد الحيّ وفحص الراحة كلّ ٢٠ ثانية)
   bool _breakShowing = false;
   bool _starting = false;
   bool _battOk = true; // هل سُمح بتجاوز توفير البطارية؟ (لعمل المنبّه والجهاز مغلق)
@@ -42,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       // تثبيت جديد؟ حاول استعادة الإعدادات من الملفّ المخفيّ بذاكرة الجهاز.
       await _restoreIfFresh();
+      await _check();
       // تهيئة الإشعارات وجدولتها بعد ظهور الواجهة (لا تُعطّل الإقلاع إن فشلت).
       try {
         await NotifyService.instance.init();
@@ -50,11 +50,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       await _scheduleNativeBreak(); // المنبّه الدقيق (setAlarmClock) — الأوثق.
       _check();
     });
-    // عدّاد حيّ كلّ ثانية لتحديث «راحتك القادمة بعد MM:SS»؛ وفحص الراحة كلّ ٢٠ ثانية.
+    // افحص طلب الراحة الأصلي كل ثانية، حتى إن كانت الواجهة مفتوحة بالفعل.
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
-      _tick++;
-      if (_tick % 20 == 0) _check();
+      _check();
     });
   }
 
@@ -176,10 +175,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _check() async {
     if (_breakShowing || _starting || !mounted) return;
-    final b = BreakService.instance.activeBreakNow();
-    if (b == null) return;
     _starting = true;
     try {
+      int? requestedEnd;
+      try {
+        requestedEnd = await _platform.invokeMethod<int>('consumeBreakRequest');
+      } catch (_) {}
+      if (!mounted) return;
+      await BreakService.instance.reloadAnchor();
+      final requested = requestedEnd == null
+          ? null
+          : DateTime.fromMillisecondsSinceEpoch(requestedEnd);
+      final b = requested != null && requested.isAfter(DateTime.now()) && BreakService.instance.enabled
+          ? (index: 0, restStart: 0, end: requested)
+          : BreakService.instance.activeBreakNow();
+      if (b == null || !mounted) return;
       // القفل الصارم: شاشة استراحة داخليّة (نشاط حقيقيّ) تغطّي كامل الشاشة، عدّادها
       // وإغلاقها موثوقان في العزلة الرئيسيّة — يفتحها منبّه setAlarmClock الدقيق.
       await BreakService.instance.beginOverlay(b.index, b.restStart, b.end);
@@ -199,10 +209,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             moveToBackOnClose: true),
       ));
       _breakShowing = false;
+      // تجاهل إعادة إرسال المنبّه نفسه أثناء عرض الراحة كي لا تُفتح ثانية.
+      try {
+        await _platform.invokeMethod('consumeBreakRequest');
+      } catch (_) {}
       // بعد الإغلاق: تأكّد من جدولة الراحة القادمة.
       await _scheduleNativeBreak();
       if (mounted) setState(() {});
     } finally {
+      _breakShowing = false;
       _starting = false;
     }
   }
