@@ -116,6 +116,7 @@ class BreakForegroundService : Service() {
                         Intent.FLAG_ACTIVITY_SINGLE_TOP
                 )
                 putExtra("show_break", true)
+                putExtra("break_end_ms", now + sp.getLong("flutter.hr_rest_ms", 5L * 60000).coerceAtLeast(60000L))
             }
             try {
                 startActivity(i)

@@ -25,13 +25,16 @@ class BreakPeriod {
   /// أوقات بدء الراحات (دقائق من منتصف الليل) المكتملة داخل النافذة.
   List<int> restStarts() {
     final out = <int>[];
-    if (workMinutes <= 0 || restMinutes <= 0 || endMinutes <= startMinutes) {
+    if (workMinutes <= 0 || restMinutes <= 0) {
       return out;
     }
+    // طبّع نهاية النافذة إلى اليوم التالي عند عبورها منتصف الليل.
+    var normalizedEnd = endMinutes;
+    if (normalizedEnd <= startMinutes) normalizedEnd += 24 * 60;
     var t = startMinutes + workMinutes; // أوّل راحة بعد أوّل مدّة عمل
     var guard = 0;
-    while (t + restMinutes <= endMinutes && guard < 200) {
-      out.add(t);
+    while (t + restMinutes <= normalizedEnd && guard < 200) {
+      out.add(t % (24 * 60));
       t += restMinutes + workMinutes;
       guard++;
     }
@@ -183,14 +186,6 @@ class BreakService extends ChangeNotifier {
     final n = d ?? DateTime.now();
     return '${n.year}${n.month.toString().padLeft(2, '0')}${n.day.toString().padLeft(2, '0')}';
   }
-
-  DateTime _todayAt(int minutes) {
-    final n = DateTime.now();
-    return DateTime(n.year, n.month, n.day).add(Duration(minutes: minutes));
-  }
-
-  bool _isDone(int index, int restStart) =>
-      _doneKeys.contains('${_dayKey()}-$index-$restStart');
 
   /// يُعلّم راحةً بعينها (فترة + وقت بدء) منجَزةً فلا تتكرّر اليوم.
   Future<void> markDone(int index, int restStart) async {

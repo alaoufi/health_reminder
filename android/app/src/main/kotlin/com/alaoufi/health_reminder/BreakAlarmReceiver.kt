@@ -17,6 +17,38 @@ import androidx.core.app.NotificationCompat
 /// حقيقيًّا يغطّي كامل الشاشة)، ويحاول أيضًا فتحها مباشرةً.
 class BreakAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        // منبّهات AlarmManager لا تبقى بعد إعادة تشغيل الجهاز؛ أعد جدولة الموعد
+        // المحفوظ دون عرض شاشة استراحة أثناء الإقلاع.
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED ||
+            intent.action == Intent.ACTION_MY_PACKAGE_REPLACED ||
+            intent.action == "android.intent.action.QUICKBOOT_POWERON" ||
+            intent.action == "com.htc.intent.action.QUICKBOOT_POWERON") {
+            val sp = context.getSharedPreferences(
+                "FlutterSharedPreferences", Context.MODE_PRIVATE
+            )
+            if (sp.getBoolean("flutter.hr_enabled", true)) {
+                val now = System.currentTimeMillis()
+                val savedNext = sp.getLong("flutter.hr_next_ms", 0L)
+                if (savedNext > now) {
+                    scheduleNext(context, savedNext)
+                } else {
+                    // إذا فات الموعد أثناء الإقلاع، ابدأ دورة جديدة من الآن بدل
+                    // ترك التطبيق بلا منبّه حتى يفتح المستخدم الإعدادات.
+                    val work = sp.getLong("flutter.hr_work_ms", 30L * 60000)
+                        .coerceAtLeast(60000L)
+                    val next = now + work
+                    sp.edit()
+                        .putLong("flutter.hr_anchor", now)
+                        .putLong("flutter.hr_next_ms", next)
+                        .apply()
+                    scheduleNext(context, next)
+                }
+            }
+            return
+        }
+        val state = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        if (!state.getBoolean("flutter.hr_enabled", true)) return
+        val breakEnd = System.currentTimeMillis() + state.getLong("flutter.hr_rest_ms", 5L * 60000).coerceAtLeast(60000L)
         val nm = context.getSystemService(Context.NOTIFICATION_SERVICE)
                 as NotificationManager
         val chId = "break_fullscreen"
@@ -36,6 +68,7 @@ class BreakAlarmReceiver : BroadcastReceiver() {
                     Intent.FLAG_ACTIVITY_SINGLE_TOP
             )
             putExtra("show_break", true)
+            putExtra("break_end_ms", breakEnd)
         }
         val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
@@ -73,10 +106,13 @@ class BreakAlarmReceiver : BroadcastReceiver() {
                 val work = sp.getLong("flutter.hr_work_ms", 30L * 60000)
                 val rest = sp.getLong("flutter.hr_rest_ms", 5L * 60000)
                 val now = System.currentTimeMillis()
-                val nextAnchor = now + rest // الراحة الحاليّة تنتهي بعد rest
-                val next = nextAnchor + work
+                // اترك المرساة عند بداية شوط العمل الذي انتهى الآن، كي ترى Dart
+                // الراحة الفعّالة وتفتح BreakScreen بدل إعادة بناء الصفحة الرئيسية.
+                // بعد بدء الشاشة ستنقل Dart المرساة إلى نهاية الراحة.
+                val activeAnchor = now - work
+                val next = now + rest + work
                 sp.edit()
-                    .putLong("flutter.hr_anchor", nextAnchor)
+                    .putLong("flutter.hr_anchor", activeAnchor)
                     .putLong("flutter.hr_next_ms", next)
                     .apply()
                 scheduleNext(context, next)

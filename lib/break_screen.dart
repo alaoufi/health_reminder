@@ -303,7 +303,7 @@ class _BreakScreenState extends State<BreakScreen> {
                           const SizedBox(height: 6),
                           Text(
                             'للطوارئ: اضغط مطوّلًا في أي مكان '
-                            '${_holdToClose.inSeconds} ثوانٍ للإغلاق',
+                            '${_holdToClose.inSeconds} ثوانٍ متواصلة للإغلاق',
                             textAlign: TextAlign.center,
                             style: const TextStyle(
                                 color: Colors.white54, fontSize: 12),

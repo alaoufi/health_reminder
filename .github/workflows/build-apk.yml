@@ -61,6 +61,15 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Require release signing
+        run: test -s android/key.properties
+
+      - name: Analyze Dart code
+        run: flutter analyze
+
+      - name: Run unit tests
+        run: flutter test
+
       # توليد أيقونات المُطلِق من assets/icon قبل البناء (adaptive + legacy).
       - name: Generate launcher icons
         run: dart run flutter_launcher_icons
@@ -89,6 +98,25 @@ jobs:
           EOF
           echo "version.json:"; cat out/version.json
 
+      - name: Verify APK identity and existing signature
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BT=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          mkdir -p previous
+          gh release download latest --repo "${{ github.repository }}" --pattern HealthReminder.apk --dir previous
+          "$BT/apksigner" verify --verbose --print-certs previous/HealthReminder.apk > previous-signature.txt
+          "$BT/apksigner" verify --verbose --print-certs out/HealthReminder.apk > out/signature.txt
+          diff <(grep 'Signer #1 certificate SHA-256 digest:' previous-signature.txt) <(grep 'Signer #1 certificate SHA-256 digest:' out/signature.txt)
+          "$BT/aapt" dump badging out/HealthReminder.apk > out/apk-metadata.txt
+          grep "package: name='com.alaoufi.health_reminder'" out/apk-metadata.txt
+          (cd out && sha256sum *.apk > SHA256SUMS.txt)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verified-apk
+          path: out/
+
       - name: Publish to 'latest' release
         uses: softprops/action-gh-release@v2
         with:
@@ -99,3 +127,6 @@ jobs:
             out/HealthReminder.apk
             out/HealthReminder-armeabi-v7a.apk
             out/version.json
+            out/SHA256SUMS.txt
+            out/apk-metadata.txt
+            out/signature.txt

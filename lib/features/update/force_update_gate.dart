@@ -18,6 +18,7 @@ class _ForceUpdateGateState extends State<ForceUpdateGate>
     with WidgetsBindingObserver {
   UpdateInfo? _update;
   bool _downloading = false;
+  bool _autoStarted = false;
   double _progress = 0;
   String? _error;
 
@@ -42,7 +43,17 @@ class _ForceUpdateGateState extends State<ForceUpdateGate>
   Future<void> _checkQuietly() async {
     try {
       final u = await UpdateService.instance.check();
-      if (mounted && u != null) setState(() => _update = u);
+      if (mounted && u != null) {
+        setState(() => _update = u);
+        // يبدأ التنزيل تلقائيًا عند اكتشاف نسخة أحدث؛ يظل تأكيد التثبيت
+        // النهائي بيد Android ما لم يكن الجهاز مُدارًا Device Owner.
+        if (!_autoStarted) {
+          _autoStarted = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _updateNow();
+          });
+        }
+      }
     } catch (_) {/* لا إنترنت أو تعذّر الفحص ⇒ لا نحجب */}
   }
 
@@ -61,6 +72,7 @@ class _ForceUpdateGateState extends State<ForceUpdateGate>
           if (mounted) setState(() => _progress = p);
         },
       );
+      if (mounted) setState(() => _downloading = false);
     } catch (e) {
       if (mounted) {
         setState(() {

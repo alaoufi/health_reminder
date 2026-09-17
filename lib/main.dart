@@ -9,6 +9,7 @@ import 'break_service.dart';
 import 'features/update/force_update_gate.dart';
 import 'home_screen.dart';
 import 'overlay_break.dart';
+import 'permission_gate.dart';
 
 /// أخطاء الإقلاع — تُعرض للمستخدم بدل الانهيار الصامت.
 final List<String> startupErrors = [];
@@ -139,7 +140,7 @@ class HealthReminderApp extends StatelessWidget {
           centerTitle: true,
         ),
       ),
-      home: const ForceUpdateGate(child: HomeScreen()),
+      home: const ForceUpdateGate(child: PermissionGate(child: HomeScreen())),
     );
   }
 }

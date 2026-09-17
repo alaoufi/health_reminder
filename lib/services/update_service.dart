@@ -108,6 +108,9 @@ class UpdateService {
       final resp = await client
           .send(http.Request('GET', Uri.parse(url)))
           .timeout(const Duration(seconds: 60));
+      if (resp.statusCode != 200) {
+        throw StateError('APK download failed: ${resp.statusCode}');
+      }
       final total = resp.contentLength ?? 0;
       final sink = file.openWrite();
       var received = 0;
