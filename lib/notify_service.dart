@@ -4,7 +4,6 @@ import 'package:timezone/data/latest_all.dart' as tzdata;
 import 'package:timezone/timezone.dart' as tz;
 
 import 'break_alarm.dart';
-import 'break_service.dart';
 
 /// إشعارات محلية صامتة بملء الشاشة عند حلول كل فترة — تُنبّه حتى إن كان التطبيق
 /// مغلقًا؛ فتحه يعرض شاشة الحركة. بلا صوت وبلا اهتزاز.
@@ -36,26 +35,6 @@ class NotifyService {
       await impl?.requestExactAlarmsPermission();
     } catch (_) {}
     _ready = true;
-  }
-
-  static const _channel = AndroidNotificationDetails(
-    'break_channel',
-    'تنبيه كسر الجلوس',
-    channelDescription: 'تنبيه صامت بملء الشاشة عند حلول وقت الحركة',
-    importance: Importance.max,
-    priority: Priority.high,
-    playSound: false,
-    enableVibration: false,
-    fullScreenIntent: true,
-    category: AndroidNotificationCategory.reminder,
-  );
-
-  tz.TZDateTime _nextInstance(int minutes) {
-    final now = tz.TZDateTime.now(tz.local);
-    var t = tz.TZDateTime(
-        tz.local, now.year, now.month, now.day, minutes ~/ 60, minutes % 60);
-    if (!t.isAfter(now)) t = t.add(const Duration(days: 1));
-    return t;
   }
 
   /// المُشغّل الموثوق الآن هو منبّه `setAlarmClock` الأصليّ (يُجدوَل من الرئيسية

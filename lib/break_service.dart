@@ -187,14 +187,6 @@ class BreakService extends ChangeNotifier {
     return '${n.year}${n.month.toString().padLeft(2, '0')}${n.day.toString().padLeft(2, '0')}';
   }
 
-  DateTime _todayAt(int minutes) {
-    final n = DateTime.now();
-    return DateTime(n.year, n.month, n.day).add(Duration(minutes: minutes));
-  }
-
-  bool _isDone(int index, int restStart) =>
-      _doneKeys.contains('${_dayKey()}-$index-$restStart');
-
   /// يُعلّم راحةً بعينها (فترة + وقت بدء) منجَزةً فلا تتكرّر اليوم.
   Future<void> markDone(int index, int restStart) async {
     _doneKeys.add('${_dayKey()}-$index-$restStart');
